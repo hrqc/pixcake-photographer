@@ -363,6 +363,31 @@ function fmtDate(ts){
   const d=new Date(ts*1000), p=n=>String(n).padStart(2,'0');
   return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());
 }
+function fmtCN(ts){
+  if(!ts) return '永久';
+  const d=new Date(ts*1000), p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日 '+p(d.getHours())+':'+p(d.getMinutes());
+}
+function startCountdown(targetSec){
+  const el = document.getElementById('cd');
+  if(!el) return;
+  const tick = () => {
+    if(!targetSec){ el.textContent = '永久'; return; }
+    const left = targetSec*1000 - Date.now();
+    if(left <= 0){ el.innerHTML = '<span class="red">已过期</span>'; return; }
+    const s=Math.floor(left/1000);
+    const d=Math.floor(s/86400), h=Math.floor((s%86400)/3600), m=Math.floor((s%3600)/60), sc=s%60;
+    const p=n=>String(n).padStart(2,'0');
+    let t;
+    if(d>0) t=d+'天 '+p(h)+'时 '+p(m)+'分';
+    else if(h>0) t=h+'时 '+p(m)+'分 '+p(sc)+'秒';
+    else t=m+'分 '+p(sc)+'秒';
+    el.innerHTML = '剩 <b class="amber">'+t+'</b> · 到期 '+fmtCN(targetSec);
+  };
+  tick();
+  if(window._cdTimer) clearInterval(window._cdTimer);
+  window._cdTimer = setInterval(tick, 1000);
+}
 function log(msg, cls){
   const t=new Date().toTimeString().slice(0,8);
   logEl.innerHTML += '<div><span class="t">'+t+'</span><span class="'+(cls||'')+'">'+msg+'</span></div>';
@@ -429,24 +454,15 @@ function renderLic(lic){
   let html =
     '<div class="statline"><span class="k">卡密</span><span class="v">'+i.key+'</span></div>'+
     '<div class="statline"><span class="k">套餐</span><span class="v">'+ (i.plan_name||'—') +'</span></div>'+
-    '<div class="statline"><span class="k">有效期至 / 剩余</span><span class="v">'+left+'</span></div>'+
+    '<div class="statline"><span class="k">有效期至</span><span class="v">'+left+'</span></div>'+
+    '<div class="statline"><span class="k">倒计时</span><span class="v" id="cd">—</span></div>'+
     '<div class="statline"><span class="k">站点地址</span><span class="v">'+(i.site_url?'<a href="'+i.site_url+'" target="_blank" style="color:var(--cyan)">'+i.site_url+'</a>':'—')+'</span></div>';
   document.getElementById('licBody').innerHTML = html;
+  startCountdown(i.expires_at);
 }
 
-function timeLeft(card){
-  if(!card.expires_at) return '0天';
-  const mins = Math.max(0, Math.ceil((card.expires_at*1000 - Date.now())/60000));
-  if(mins < 60) return mins + '分钟';
-  if(mins < 1440) return Math.ceil(mins/60) + '小时';
-  return (card.left_days ?? 0) + '天';
-}
 function renderCard(card, tenant){
   const expired = card.expired===true || card.status==='expired' || (card.expires_at && card.expires_at*1000 <= Date.now());
-  let left;
-  if(card.unlimited_time) left='<span class="green">不限时</span>';
-  else if(expired) left='<span class="red">已过期</span>';
-  else left='<span class="green">剩 '+timeLeft(card)+'</span>';
   let quotaTxt;
   if(card.unlimited_quota) quotaTxt='<span class="green">不限张</span>';
   else quotaTxt='<span class="'+(card.remaining>0?'amber':'red')+'">'+Math.max(0,card.remaining)+' / '+card.quota+' 张</span>';
@@ -454,7 +470,8 @@ function renderCard(card, tenant){
     '<div class="statline"><span class="k">站点</span><span class="v">'+(tenant.name||'摄影师')+'</span></div>'+
     '<div class="statline"><span class="k">卡密</span><span class="v">'+card.key+'</span></div>'+
     '<div class="statline"><span class="k">套餐</span><span class="v">'+(card.plan_name||'—')+'</span></div>'+
-    '<div class="statline"><span class="k">到期</span><span class="v">'+left+'</span></div>'+
+    '<div class="statline"><span class="k">到期时间</span><span class="v">'+(card.unlimited_time?'不限时':fmtCN(card.expires_at))+'</span></div>'+
+    '<div class="statline"><span class="k">倒计时</span><span class="v" id="cd">—</span></div>'+
     '<div class="statline"><span class="k">剩余张数</span><span class="v">'+quotaTxt+'</span></div>'+
     '<div class="statline"><span class="k">客户站点</span><span class="v">'+(tenant.site_url?'<a href="'+tenant.site_url+'" target="_blank" style="color:var(--cyan)">打开站点</a>':'—')+'</span></div>';
   if(expired || (card.quota && card.remaining<=0)){
@@ -466,6 +483,7 @@ function renderCard(card, tenant){
     document.getElementById('warnQuota').classList.add('hide');
   }
   document.getElementById('licBody').innerHTML = html;
+  startCountdown(card.unlimited_time ? 0 : card.expires_at);
 }
 
 /* ============ 工作区 ============ */
