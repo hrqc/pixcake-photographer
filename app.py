@@ -31,6 +31,111 @@ WS_CANDIDATES = [
     os.path.join(os.path.expanduser('~'), 'PixelCake', 'Workspace', 'project'),
 ]
 
+# 有界搜索时跳过的系统/无关目录
+_SKIP_DIRS = frozenset({
+    'windows', 'program files', 'program files (x86)', 'perflogs', 'recovery',
+    '$recycle.bin', 'system volume information', 'msocache', 'temp', 'appdata',
+    'node_modules', '__pycache__', '.git', '.pixcake-photographer', 'hiberfil.sys',
+})
+
+
+def _is_album_root(d):
+    """d 是否为相册根: 存在 <d>/<user>/<album>/thumbnail_cache."""
+    try:
+        for u in os.listdir(d):
+            up = os.path.join(d, u)
+            if os.path.isdir(up):
+                try:
+                    for a in os.listdir(up):
+                        if os.path.isdir(os.path.join(up, a, 'thumbnail_cache')):
+                            return True
+                except OSError:
+                    continue
+    except OSError:
+        pass
+    return False
+
+
+def _workspace_inside(p):
+    """在 p 内部寻找真正的相册根, 找不到返回 None.
+    探测: p 本身 / p/project / p 的每个直接子目录及其 project 子目录."""
+    cand = [p]
+    proj = os.path.join(p, 'project')
+    if os.path.isdir(proj):
+        cand.append(proj)
+    try:
+        for name in os.listdir(p):
+            q = os.path.join(p, name)
+            if os.path.isdir(q):
+                cand.append(q)
+                qp = os.path.join(q, 'project')
+                if os.path.isdir(qp):
+                    cand.append(qp)
+    except OSError:
+        pass
+    for c in cand:
+        if _is_album_root(c):
+            return c
+    return None
+
+
+def _search(d, depth, max_depth, _add):
+    """有界深度搜索工作区; 命中标记名目录才检查内部, 避免全盘 listdir."""
+    if depth >= max_depth:
+        return
+    try:
+        names = os.listdir(d)
+    except OSError:
+        return
+    for name in names:
+        if name.lower() in _SKIP_DIRS:
+            continue
+        p = os.path.join(d, name)
+        if not os.path.isdir(p):
+            continue
+        low = name.lower()
+        if 'pixcake' in low or name == '像素蛋糕' or name == 'xsdg' or name == 'project':
+            ws = _workspace_inside(p)
+            if ws:
+                _add(ws)
+                continue
+        _search(p, depth + 1, max_depth, _add)
+
+
+def _discover_workspaces():
+    """返回所有探测到的工作区相册根 (绝对路径), 去重.
+    顺序: 已知候选路径 → 常见盘符/用户目录有界搜索."""
+    found, seen = [], set()
+
+    def _add(p):
+        p = os.path.normpath(p)
+        if p not in seen:
+            found.append(p)
+            seen.add(p)
+
+    for p in WS_CANDIDATES:
+        if os.path.isdir(p) and _is_album_root(p):
+            _add(p)
+    for root in (os.path.expanduser('~'), 'C:/', 'D:/', 'E:/', 'F:/'):
+        if os.path.isdir(root):
+            _search(root, 0, 4, _add)
+    return found
+
+
+def _resolve_workspace(ws):
+    """接受用户输入的工作区路径, 尽力返回真正的相册根.
+    - 目录不存在 → None
+    - 目录存在: 自动向下定位 (Workspace 根 → project; 任意层 → 内部相册根)
+    - 存在但内部无相册结构 → 原样返回 (让前端提示, 不锁死用户)"""
+    if not ws:
+        return None
+    ws = ws.strip().strip('"').strip("'")
+    if not os.path.isdir(ws):
+        return None
+    hit = _workspace_inside(ws)
+    return hit or ws
+
+
 import threading
 
 _uploader = uploader.Uploader()
@@ -95,13 +200,10 @@ def _verify_loop():
 
 
 def probe_workspace():
-    """返回已存在的候选路径 + 当前配置的工作区."""
-    found = []
-    for p in WS_CANDIDATES:
-        if os.path.isdir(p):
-            found.append(p)
-    cur = (config.get('workspace') or '').strip()
-    return {'candidates': found, 'current': cur, 'default': scanner_default()}
+    """返回探测到的工作区(相册根)候选 + 当前配置的工作区."""
+    return {'candidates': _discover_workspaces(),
+            'current': (config.get('workspace') or '').strip(),
+            'default': scanner_default()}
 
 
 def scanner_default():
@@ -245,6 +347,7 @@ class Handler(BaseHTTPRequestHandler):
     # ---------------- 实现 ----------------
     def _config_post(self, body):
         cfg = {}
+        note = None
         if body.get('server_url'):
             url = str(body['server_url']).strip().rstrip('/')
             if url and not re.match(r'^https?://', url):
@@ -253,13 +356,24 @@ class Handler(BaseHTTPRequestHandler):
             cfg['server_url'] = url
         if body.get('workspace'):
             ws = str(body['workspace']).strip()
-            if not os.path.isdir(ws):
-                self._json({'error': '工作区目录不存在'}, 400)
+            if not ws:
+                self._json({'error': '工作区路径为空'}, 400)
                 return
-            cfg['workspace'] = ws
+            resolved = _resolve_workspace(ws)
+            if resolved is None:
+                self._json({'error': '目录不存在: %s' % ws}, 400)
+                return
+            cfg['workspace'] = resolved
+            if os.path.normpath(resolved) != os.path.normpath(ws):
+                note = '已自动定位到相册目录: %s' % resolved
         if cfg:
             config.set_many(**cfg)
-        self._json({'ok': True})
+        resp = {'ok': True}
+        if 'workspace' in cfg:
+            resp['workspace'] = cfg['workspace']
+        if note:
+            resp['note'] = note
+        self._json(resp)
 
     def _activate_post(self, body):
         key = (body.get('key') or '').strip().upper()

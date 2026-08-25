@@ -127,6 +127,7 @@
 
   .hint{color:var(--mut); font-size:12px; margin-top:8px}
   .err{color:var(--red); font-size:12px; min-height:16px; margin-top:8px}
+  .err.ok{color:var(--green)}
   .okmsg{color:var(--green); font-size:12px; margin-top:8px}
 
   /* ---------- 告警条 ---------- */
@@ -515,15 +516,28 @@ async function probe(){
   if(!r.j.candidates.length && r.j.current){ const o=document.createElement('option'); o.value=r.j.current; o.textContent=r.j.current+' (当前)'; o.selected=true; sel.appendChild(o); }
   document.getElementById('wsPath').innerHTML = '<span class="dot">◆</span> '+(r.j.current||'未设置');
   document.getElementById('wsPathShort').textContent = (r.j.current? r.j.current.split(/[\\\/]/).pop() : '未设置');
-  if(r.j.current) loadAlbums();
+  // 仅探测到一个工作区且尚未设置 → 自动选用 (免去手动粘贴)
+  if(!r.j.current && r.j.candidates.length===1){ setWs(r.j.candidates[0]); return; }
+  if(r.j.current) await loadAlbums();
 }
 async function setWs(path){
   if(!path){ return; }
-  document.getElementById('wsErr').textContent='';
-  const r = await api(API+'/config', {method:'POST', body:JSON.stringify({workspace:path})});
-  if(!r.ok){ document.getElementById('wsErr').textContent = r.j.error||'设置失败'; return; }
-  document.getElementById('wsErr').textContent = '';
-  probe(); loadAlbums();
+  const errEl = document.getElementById('wsErr');
+  errEl.className='err'; errEl.textContent='';
+  let r;
+  try{
+    r = await api(API+'/config', {method:'POST', body:JSON.stringify({workspace:path})});
+  }catch(e){
+    errEl.textContent = '设置请求失败: '+(e.message||e);
+    return;
+  }
+  if(!r.ok){ errEl.textContent = r.j.error||'设置失败'; return; }
+  await probe();
+  if(r.j.note){ errEl.className='err ok'; errEl.textContent = r.j.note; }
+  if(r.j.workspace && albums.length===0){
+    errEl.className='err';
+    errEl.textContent='工作区已保存，但目录下没找到相册（缺少 thumbnail_cache）。若粘贴的是像素蛋糕的上级目录，系统会自动向下定位到相册目录。';
+  }
 }
 
 /* ============ 相册 ============ */
