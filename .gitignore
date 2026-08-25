@@ -1,0 +1,8 @@
+# 构建产物
+dist/
+build/
+*.pyc
+__pycache__/
+
+# 本地数据
+.pixcake-photographer/

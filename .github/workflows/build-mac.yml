@@ -1,0 +1,40 @@
+name: Build Mac (摄影师端)
+
+on:
+  workflow_dispatch:       # 手动触发
+  push:
+    tags: ['v*']           # 打 tag 自动出包
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14    # Apple Silicon (arm64)
+            arch: arm64
+          - runner: macos-13    # Intel (x86_64)
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install deps
+        run: pip install pyinstaller
+      - name: Build .app
+        run: |
+          pyinstaller -y --noconfirm --windowed --name pixcake-photographer \
+            --add-data static:static run.py
+      - name: Create dmg
+        run: |
+          hdiutil create -volname "像素蛋糕摄影师端" -srcfolder dist/pixcake-photographer.app \
+            -ov -format UDZO dist/pixcake-photographer-mac-${{ matrix.arch }}.dmg
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pixcake-photographer-mac-${{ matrix.arch }}
+          path: |
+            dist/pixcake-photographer-mac-${{ matrix.arch }}.dmg
+            dist/pixcake-photographer.app

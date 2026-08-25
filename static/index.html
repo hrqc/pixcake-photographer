@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>像素蛋糕 · 摄影师端 CONSOLE</title>
+<style>
+  :root{
+    --bg0:#121316; --bg1:#1a1c21; --bg2:#22252b; --bg3:#2a2e35;
+    --line:#33373f; --line2:#42474f;
+    --txt:#d7dae0; --mut:#878e9c; --dim:#5a606b;
+    --amber:#ffa726; --amber2:#ffc46b; --amberD:#7a4a05;
+    --green:#2ee86e; --red:#ff5544; --cyan:#4cc9f0; --purple:#b39dff;
+    --mono:ui-monospace,Consolas,"Menlo",monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%}
+  body{
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,.015) 0 1px, transparent 1px 3px),
+      radial-gradient(1200px 500px at 70% -10%, rgba(255,167,38,.06), transparent 60%),
+      var(--bg0);
+    color:var(--txt);
+    font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+    font-size:13px; line-height:1.5;
+    min-height:100vh;
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding:18px 20px 40px}
+
+  /* ---------- 顶栏 ---------- */
+  .console-bar{
+    display:flex; align-items:stretch; gap:0;
+    background:var(--bg2);
+    border:1px solid var(--line); border-left:4px solid var(--amber);
+    margin-bottom:18px; overflow:hidden;
+  }
+  .console-bar .brand{
+    padding:12px 18px; display:flex; align-items:center; gap:12px;
+    background:linear-gradient(90deg, var(--bg3), transparent);
+  }
+  .console-bar .logo{
+    width:34px; height:34px; border:2px solid var(--amber); transform:rotate(45deg);
+    display:flex; align-items:center; justify-content:center; flex:0 0 auto;
+  }
+  .console-bar .logo span{transform:rotate(-45deg); color:var(--amber); font-size:18px; font-weight:700}
+  .console-bar h1{font-size:16px; letter-spacing:1px; font-weight:700}
+  .console-bar h1 small{display:block; color:var(--mut); font-size:10.5px; letter-spacing:3px; font-weight:400}
+  .console-bar .machine{
+    margin-left:auto; padding:10px 16px; text-align:right; border-left:1px solid var(--line);
+    font-family:var(--mono); font-size:11px; color:var(--mut);
+    display:flex; flex-direction:column; justify-content:center;
+  }
+  .console-bar .machine b{color:var(--amber2); font-size:12px; letter-spacing:1px}
+  .led{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle}
+  .led.green{background:var(--green); box-shadow:0 0 8px var(--green)}
+  .led.amber{background:var(--amber); box-shadow:0 0 8px var(--amber)}
+  .led.red{background:var(--red); box-shadow:0 0 8px var(--red)}
+  .led.gray{background:var(--dim); box-shadow:none}
+  .led.blink{animation:blink 1s steps(2) infinite}
+  @keyframes blink{50%{opacity:.25}}
+
+  /* ---------- 面板 ---------- */
+  .panel{
+    background:var(--bg1); border:1px solid var(--line); margin-bottom:16px; position:relative;
+    clip-path:polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  }
+  .panel::before,.panel::after{
+    content:""; position:absolute; width:7px; height:7px; border-radius:50%;
+    background:radial-gradient(circle at 40% 35%, #4a4f58, #24272c);
+    box-shadow:inset 0 -1px 2px rgba(0,0,0,.7);
+  }
+  .panel::before{top:6px; left:6px}
+  .panel::after{bottom:6px; right:6px}
+  .panel-head{
+    display:flex; align-items:center; gap:10px; padding:9px 16px;
+    background:var(--bg2); border-bottom:1px solid var(--line);
+  }
+  .panel-head .tag{
+    font-family:var(--mono); font-size:10px; letter-spacing:2px; color:var(--amber);
+    border:1px solid var(--amberD); padding:2px 7px; background:rgba(255,167,38,.07);
+  }
+  .panel-head h2{font-size:13px; font-weight:700; letter-spacing:1px}
+  .panel-head .right{margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--mut)}
+  .panel-body{padding:14px 16px}
+  .panel-body.collapse{padding:0}
+
+  .grid{display:grid; grid-template-columns:1.25fr .9fr; gap:16px; align-items:start}
+  @media (max-width:900px){.grid{grid-template-columns:1fr}}
+
+  /* ---------- 表单 ---------- */
+  .keyrow{display:flex; gap:8px}
+  .keyrow input{
+    flex:1; background:var(--bg2); border:1px solid var(--line2); color:var(--txt);
+    padding:11px 12px; font-family:var(--mono); font-size:17px; letter-spacing:2px;
+    text-transform:uppercase; outline:none;
+  }
+  .keyrow input:focus{border-color:var(--amber)}
+  .btn{
+    background:linear-gradient(180deg,#ffb545,#f59b12); color:#1a1205; border:none;
+    padding:11px 22px; font-weight:700; cursor:pointer; letter-spacing:1px;
+    clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+    font-size:13px;
+  }
+  .btn:hover{filter:brightness(1.08)}
+  .btn:disabled{opacity:.45; cursor:not-allowed; filter:none}
+  .btn.ghost{
+    background:var(--bg3); color:var(--txt); border:1px solid var(--line2);
+  }
+  .btn.ghost:hover{background:#30353e}
+  .btn.red{background:linear-gradient(180deg,#ff6a5a,#f03524); color:#fff}
+  .btn.sm{padding:6px 12px; font-size:12px}
+  .btn.full{width:100%; margin-top:10px}
+
+  .formlabel{display:block; font-size:11px; color:var(--mut); letter-spacing:1px; margin:12px 0 5px}
+  .select{
+    width:100%; background:var(--bg2); border:1px solid var(--line2); color:var(--txt);
+    padding:9px 10px; outline:none; font-size:13px;
+  }
+  .select:focus{border-color:var(--amber)}
+  .pathline{
+    display:flex; align-items:center; gap:8px; margin-top:8px;
+    font-family:var(--mono); font-size:11.5px; color:var(--cyan);
+    background:var(--bg2); border:1px solid var(--line); padding:8px 10px;
+    word-break:break-all;
+  }
+  .pathline .dot{color:var(--green)}
+
+  .hint{color:var(--mut); font-size:12px; margin-top:8px}
+  .err{color:var(--red); font-size:12px; min-height:16px; margin-top:8px}
+  .okmsg{color:var(--green); font-size:12px; margin-top:8px}
+
+  /* ---------- 告警条 ---------- */
+  .warnbar{
+    border:1px solid var(--amberD); color:var(--amber2); padding:10px 14px; font-size:12.5px;
+    background:repeating-linear-gradient(45deg, rgba(255,167,38,.10) 0 10px, rgba(255,167,38,.04) 10px 20px);
+    margin-bottom:16px; display:flex; gap:10px; align-items:center;
+  }
+  .warnbar .big{font-size:15px; font-weight:700}
+  .warnbar.error{color:#ff8d80; border-color:#8c3b30;
+    background:repeating-linear-gradient(45deg, rgba(255,85,68,.12) 0 10px, rgba(255,85,68,.05) 10px 20px)}
+  .warnbar a{color:var(--amber2); margin-left:auto; font-weight:700}
+
+  /* ---------- 状态行 ---------- */
+  .statline{display:flex; justify-content:space-between; gap:14px; padding:7px 0; border-bottom:1px dashed var(--line); font-size:12.5px}
+  .statline:last-child{border-bottom:none}
+  .statline .k{color:var(--mut)}
+  .statline .v{font-family:var(--mono); color:var(--txt)}
+  .statline .v.amber{color:var(--amber2); font-weight:700}
+  .statline .v.green{color:var(--green)}
+  .statline .v.red{color:var(--red)}
+
+  /* ---------- 相册表格 ---------- */
+  table{width:100%; border-collapse:collapse}
+  th,td{text-align:left; padding:7px 8px; font-size:12px; border-bottom:1px solid var(--line)}
+  th{color:var(--mut); font-weight:600; letter-spacing:1px; font-size:11px; background:var(--bg2)}
+  tr.rowsel{background:rgba(255,167,38,.06)}
+  td .name{font-size:12.5px}
+  td .path{color:var(--dim); font-size:10.5px; font-family:var(--mono)}
+  .num{font-family:var(--mono)}
+  .badge{display:inline-block; padding:1px 7px; font-size:10.5px; font-family:var(--mono); letter-spacing:1px}
+  .badge.ok{color:var(--green); border:1px solid rgba(46,232,110,.4)}
+  .badge.pend{color:var(--amber2); border:1px solid var(--amberD)}
+  .badge.no{color:var(--dim); border:1px solid var(--line2)}
+  .badge.err{color:var(--red); border:1px solid rgba(255,85,68,.5)}
+  input[type=checkbox]{accent-color:var(--amber); width:15px; height:15px; cursor:pointer}
+
+  /* ---------- 进度 ---------- */
+  .meter{height:22px; background:var(--bg3); border:1px solid var(--line2); position:relative; overflow:hidden; margin:6px 0}
+  .meter .fill{height:100%; background:
+    repeating-linear-gradient(90deg, var(--amber) 0 12px, var(--amber2) 12px 16px); transition:width .3s}
+  .meter .fill.green{background:repeating-linear-gradient(90deg, #2ac45e 0 12px, var(--green) 12px 16px)}
+  .meter .lbl{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-family:var(--mono); font-size:11px; color:#111; font-weight:700; text-shadow:0 0 4px rgba(255,255,255,.4)}
+  .progress-grid{display:grid; grid-template-columns:1fr 1fr; gap:6px 18px}
+  .pcell .k{color:var(--mut); font-size:11px}
+  .pcell .v{font-family:var(--mono); font-size:15px; color:var(--amber2); font-weight:700}
+  .phasebar{display:flex; gap:6px; margin:10px 0}
+  .ph{flex:1; text-align:center; font-size:11px; color:var(--dim); padding:5px 2px; border:1px solid var(--line); font-family:var(--mono); letter-spacing:1px}
+  .ph.on{color:var(--amber2); border-color:var(--amberD); background:rgba(255,167,38,.08)}
+  .ph.done{color:var(--green); border-color:rgba(46,232,110,.4)}
+
+  /* ---------- 日志 ---------- */
+  .log{
+    background:#0c0d10; border:1px solid var(--line); font-family:var(--mono); font-size:11px;
+    height:180px; overflow-y:auto; padding:8px 10px; color:#a7b0be;
+  }
+  .log .t{color:var(--dim); margin-right:8px}
+  .log .ok{color:var(--green)}
+  .log .bad{color:var(--red)}
+  .log .amber{color:var(--amber2)}
+
+  .site-link{
+    display:block; text-align:center; font-family:var(--mono); font-size:15px; color:var(--cyan);
+    background:var(--bg2); border:1px solid var(--line2); padding:12px; margin-top:8px; letter-spacing:1px;
+  }
+  .site-link:hover{color:#8fe3ff; border-color:var(--cyan)}
+
+  .hide{display:none!important}
+  .footer{color:var(--dim); text-align:center; font-size:11px; font-family:var(--mono); margin-top:22px; letter-spacing:1px}
+
+  .gate{
+    max-width:520px; margin:8vh auto 0; padding:30px 32px;
+    background:var(--bg1); border:1px solid var(--line); border-top:4px solid var(--amber);
+  }
+  .gate h1{font-size:18px; letter-spacing:2px; margin-bottom:4px}
+  .gate .sub{color:var(--mut); font-size:12.5px; margin-bottom:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 顶栏 -->
+  <div class="console-bar">
+    <div class="brand">
+      <div class="logo"><span>▲</span></div>
+      <h1>PIXCAKE · 摄影师端<small>PHOTOGRAPHER UPLINK CONSOLE</small></h1>
+    </div>
+    <div class="machine">
+      <div><span class="led gray" id="topLed"></span>授权状态 <b id="topState">—</b></div>
+      <div>机器码 <b id="topFp">—</b></div>
+    </div>
+  </div>
+
+  <!-- 激活门 -->
+  <div class="gate" id="gate">
+    <h1>⚡ 系统未激活</h1>
+    <div class="sub">请使用从管理员处购买的卡密激活本客户端</div>
+    <label class="formlabel" style="margin-top:0">服务器地址</label>
+    <div class="keyrow">
+      <input id="serverUrl" value="" placeholder="https://hrqc105.icu" style="font-size:13px; letter-spacing:0">
+    </div>
+    <label class="formlabel">激活卡密</label>
+    <div class="keyrow">
+      <input id="actKey" maxlength="19" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off">
+      <button class="btn" id="actBtn" onclick="doActivate()">激活</button>
+    </div>
+    <div class="err" id="actErr"></div>
+    <div class="hint">每张卡密可绑定一台电脑 · 激活后自动获得独立选片站点</div>
+  </div>
+
+  <!-- 主界面 -->
+  <div id="dash" class="hide">
+    <div id="warnHost" class="warnbar hide">
+      <span>⚠</span><span id="warnHostTxt">无法连接服务器</span>
+      <a href="javascript:refreshMe()">重试</a>
+    </div>
+    <div id="warnQuota" class="warnbar error hide">
+      <span>⚠</span><span class="big" id="warnQuotaTxt">卡密已过期 / 张数已用完</span>
+      <span id="warnContact">请联系管理员购买卡密</span>
+    </div>
+
+    <div class="grid">
+      <!-- 左列: 操作 -->
+      <div>
+        <!-- 工作区 -->
+        <div class="panel">
+          <div class="panel-head">
+            <span class="tag">WS</span><h2>像素蛋糕工作区</h2>
+            <span class="right" id="wsPathShort">—</span>
+          </div>
+          <div class="panel-body">
+            <label class="formlabel" style="margin-top:0">自动探测结果</label>
+            <select class="select" id="wsSelect" onchange="setWs(this.value)">
+              <option value="">— 未找到，请手动填写 —</option>
+            </select>
+            <div class="pathline" id="wsPath"><span class="dot">◆</span> 未设置</div>
+            <label class="formlabel">或手动输入工作区路径</label>
+            <div class="keyrow">
+              <input id="wsManual" placeholder="D:/xsdg/像素蛋糕/.PixCake-qt_pro Workspace/project" style="font-size:12px; letter-spacing:0">
+              <button class="btn ghost sm" onclick="setWs(document.getElementById('wsManual').value.trim())">设置</button>
+            </div>
+            <div class="err" id="wsErr"></div>
+          </div>
+        </div>
+
+        <!-- 相册 -->
+        <div class="panel">
+          <div class="panel-head">
+            <span class="tag">ALBUM</span><h2>相册列表</h2>
+            <span class="right"><label style="cursor:pointer"><input type="checkbox" id="selAll" onchange="toggleAll()" style="vertical-align:-2px"> 全选</label></span>
+          </div>
+          <div class="panel-body collapse">
+            <div style="max-height:300px; overflow:auto">
+              <table id="albumTable">
+                <thead><tr><th style="width:34px">选</th><th>相册</th><th style="width:56px">张数</th><th style="width:84px">上传</th><th style="width:70px">大小</th></tr></thead>
+                <tbody id="albumBody"><tr><td colspan="5" style="color:var(--dim); text-align:center; padding:18px">请先设置工作区</td></tr></tbody>
+              </table>
+            </div>
+            <div style="padding:12px 14px; border-top:1px solid var(--line)">
+              <button class="btn full" id="upBtn" onclick="doUpload()">开 始 上 传</button>
+              <div class="err" id="upErr"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右列: 状态 -->
+      <div>
+        <!-- 授权状态 -->
+        <div class="panel">
+          <div class="panel-head">
+            <span class="tag">LIC</span><h2>授权状态</h2>
+            <span class="right" id="licLed"><span class="led gray"></span></span>
+          </div>
+          <div class="panel-body">
+            <div id="licBody"><div class="hint">正在读取…</div></div>
+          </div>
+        </div>
+
+        <!-- 上传进度 -->
+        <div class="panel">
+          <div class="panel-head">
+            <span class="tag">UP</span><h2>上传进度</h2>
+            <span class="right" id="upPhase">IDLE</span>
+          </div>
+          <div class="panel-body">
+            <div class="phasebar" id="phaseBar">
+              <div class="ph" data-p="uploading">UPLOAD</div>
+              <div class="ph" data-p="scan">SCAN</div>
+              <div class="ph" data-p="done">DONE</div>
+            </div>
+            <div class="progress-grid">
+              <div class="pcell"><div class="k">文件</div><div class="v" id="pFiles">0 / 0</div></div>
+              <div class="pcell"><div class="k">字节</div><div class="v" id="pBytes">0 B</div></div>
+            </div>
+            <div class="meter"><div class="fill" id="pFill" style="width:0%"></div><div class="lbl" id="pPct">0%</div></div>
+            <div class="hint" id="pCur" style="font-family:var(--mono); font-size:10.5px; word-break:break-all">—</div>
+          </div>
+        </div>
+
+        <!-- 日志 -->
+        <div class="panel">
+          <div class="panel-head">
+            <span class="tag">LOG</span><h2>系统日志</h2>
+          </div>
+          <div class="panel-body collapse">
+            <div class="log" id="log"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">PIXCAKE-PHOTOGRAPHER v1.0 · 数据目录 ~/.pixcake-photographer</div>
+</div>
+
+<script>
+'use strict';
+let ST = null;        // /api/status
+let albums = [];
+const logEl = document.getElementById('log');
+const API = '/api';
+
+function fmtSize(b){
+  if(!b) return '0 B';
+  const u=['B','KB','MB','GB']; let i=0, v=b;
+  while(v>=1024 && i<3){v/=1024; i++}
+  return v.toFixed(i?1:0)+' '+u[i];
+}
+function fmtDate(ts){
+  if(!ts) return '永久';
+  const d=new Date(ts*1000), p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());
+}
+function log(msg, cls){
+  const t=new Date().toTimeString().slice(0,8);
+  logEl.innerHTML += '<div><span class="t">'+t+'</span><span class="'+(cls||'')+'">'+msg+'</span></div>';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function setLed(el, cls){ el.className='led '+cls; }
+function api(url, opts){
+  return fetch(url, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}))
+    .then(r=>r.json().then(j=>({ok:r.ok, status:r.status, j})));
+}
+
+/* ============ 状态 ============ */
+async function loadStatus(){
+  const r = await api(API+'/status');
+  ST = r.j;
+  document.getElementById('topFp').textContent = ST.machine;
+  const lic = ST.license;
+  document.getElementById('topState').textContent = {ok:'正常', none:'未激活', expired:'已过期', quota:'额度用尽', device:'设备不符'}[lic.state] || lic.state;
+  setLed(document.getElementById('topLed'), {ok:'green', expired:'red', quota:'amber', device:'red'}[lic.state] || 'gray');
+  if(lic.state === 'none'){
+    document.getElementById('gate').classList.remove('hide');
+    document.getElementById('dash').classList.add('hide');
+    if(ST.server_url && ST.server_url !== 'https://hrqc105.icu')
+      document.getElementById('serverUrl').value = ST.server_url;
+    return;
+  }
+  document.getElementById('gate').classList.add('hide');
+  document.getElementById('dash').classList.remove('hide');
+  renderLic(lic);
+  if(ST.remote){
+    if(ST.remote.error){
+      document.getElementById('warnHost').classList.remove('hide');
+      document.getElementById('warnHostTxt').textContent = '无法连接服务器: '+ST.remote.error;
+    } else {
+      document.getElementById('warnHost').classList.add('hide');
+    }
+    if(ST.remote.card) renderCard(ST.remote.card, ST.remote.tenant||{});
+  } else if(lic.state==='ok'){
+    document.getElementById('warnHost').classList.remove('hide');
+    document.getElementById('warnHostTxt').textContent = '尚未登录服务器会话';
+  }
+  renderUpload(ST.upload);
+  renderWorkspace(ST.workspace || '');
+}
+
+function renderLic(lic){
+  const i = lic.info || {};
+  let left, led;
+  if(lic.state==='expired'){ left='<span style="color:var(--red)">已过期</span>'; led='red'; }
+  else if(lic.state==='quota'){ left='<span style="color:var(--amber2)">已用完</span>'; led='amber'; }
+  else if(i.expires_at){ left='<span class="green">'+fmtDate(i.expires_at)+'</span>'; led='green'; }
+  else if(i.quota){ left='<span class="amber">'+(i.quota-(i.quota_used||0))+' / '+i.quota+' 张</span>'; led='green'; }
+  else { left='<span class="green">永久</span>'; led='green'; }
+  setLed(document.getElementById('licLed').querySelector('.led'), led);
+  let html =
+    '<div class="statline"><span class="k">卡密</span><span class="v">'+i.key+'</span></div>'+
+    '<div class="statline"><span class="k">套餐</span><span class="v">'+ (i.plan_name||'—') +'</span></div>'+
+    '<div class="statline"><span class="k">有效期至 / 剩余</span><span class="v">'+left+'</span></div>'+
+    '<div class="statline"><span class="k">站点地址</span><span class="v">'+(i.site_url?'<a href="'+i.site_url+'" target="_blank" style="color:var(--cyan)">'+i.site_url+'</a>':'—')+'</span></div>';
+  document.getElementById('licBody').innerHTML = html;
+}
+
+function renderCard(card, tenant){
+  const expired = card.status==='expired' || (!card.unlimited_time && card.left_days===0);
+  let left;
+  if(card.unlimited_time) left='<span class="green">不限时</span>';
+  else if(expired) left='<span class="red">已过期</span>';
+  else left='<span class="green">'+fmtDate(card.expires_at)+'</span>';
+  let quotaTxt;
+  if(card.unlimited_quota) quotaTxt='<span class="green">不限张</span>';
+  else quotaTxt='<span class="'+(card.remaining>0?'amber':'red')+'">'+Math.max(0,card.remaining)+' / '+card.quota+' 张</span>';
+  let html =
+    '<div class="statline"><span class="k">站点</span><span class="v">'+(tenant.name||'摄影师')+'</span></div>'+
+    '<div class="statline"><span class="k">卡密</span><span class="v">'+card.key+'</span></div>'+
+    '<div class="statline"><span class="k">套餐</span><span class="v">'+(card.plan_name||'—')+'</span></div>'+
+    '<div class="statline"><span class="k">到期</span><span class="v">'+left+'</span></div>'+
+    '<div class="statline"><span class="k">剩余张数</span><span class="v">'+quotaTxt+'</span></div>'+
+    '<div class="statline"><span class="k">客户站点</span><span class="v">'+(tenant.site_url?'<a href="'+tenant.site_url+'" target="_blank" style="color:var(--cyan)">打开站点</a>':'—')+'</span></div>';
+  if(expired || (card.quota && card.remaining<=0)){
+    const contact = ST.remote && ST.remote.tenant ? (ST.remote.tenant.admin_contact||'') : '';
+    document.getElementById('warnQuota').classList.remove('hide');
+    document.getElementById('warnQuotaTxt').textContent = expired ? '卡密已过期' : '张数额度已用完';
+    document.getElementById('warnContact').textContent = (contact?'管理员联系: '+contact:'请联系管理员购买卡密进行续费/充值');
+  } else {
+    document.getElementById('warnQuota').classList.add('hide');
+  }
+  document.getElementById('licBody').innerHTML = html;
+}
+
+/* ============ 工作区 ============ */
+async function probe(){
+  const r = await api(API+'/workspace');
+  const sel = document.getElementById('wsSelect');
+  sel.innerHTML = '';
+  const seen = new Set();
+  if(r.j.current){ seen.add(r.j.current); }
+  if(r.j.candidates.length===0){
+    sel.innerHTML = '<option value="">— 未找到工作区 —</option>';
+  }
+  for(const c of r.j.candidates){
+    seen.add(c);
+    const o=document.createElement('option'); o.value=c; o.textContent=c;
+    if(c===r.j.current) o.selected=true;
+    sel.appendChild(o);
+  }
+  if(!r.j.candidates.length && r.j.current){ const o=document.createElement('option'); o.value=r.j.current; o.textContent=r.j.current+' (当前)'; o.selected=true; sel.appendChild(o); }
+  document.getElementById('wsPath').innerHTML = '<span class="dot">◆</span> '+(r.j.current||'未设置');
+  document.getElementById('wsPathShort').textContent = (r.j.current? r.j.current.split(/[\\\/]/).pop() : '未设置');
+  if(r.j.current) loadAlbums();
+}
+async function setWs(path){
+  if(!path){ return; }
+  document.getElementById('wsErr').textContent='';
+  const r = await api(API+'/config', {method:'POST', body:JSON.stringify({workspace:path})});
+  if(!r.ok){ document.getElementById('wsErr').textContent = r.j.error||'设置失败'; return; }
+  document.getElementById('wsErr').textContent = '';
+  probe(); loadAlbums();
+}
+
+/* ============ 相册 ============ */
+async function loadAlbums(){
+  const r = await api(API+'/albums');
+  const body = document.getElementById('albumBody');
+  if(!r.ok){ body.innerHTML = '<tr><td colspan="5" style="color:var(--red);text-align:center;padding:18px">'+r.j.error+'</td></tr>'; return; }
+  albums = r.j.albums;
+  document.getElementById('wsPath').innerHTML = '<span class="dot">◆</span> '+r.j.workspace;
+  if(!albums.length){
+    body.innerHTML = '<tr><td colspan="5" style="color:var(--dim);text-align:center;padding:18px">工作区下没有找到相册 (缺少 thumbnail_cache 目录)</td></tr>';
+    return;
+  }
+  let html='';
+  for(const a of albums){
+    const state = a.complete ? 'ok' : (a.uploaded_bytes>0 ? 'pend' : 'no');
+    const stateTxt = a.complete ? '已传' : (a.uploaded_bytes>0 ? (Math.round(a.uploaded_bytes*100/a.total_bytes))+'%' : '未传');
+    html += '<tr data-path="'+a.path.replace(/\\/g,'\\\\')+'">'+
+      '<td><input type="checkbox" class="alchk" data-path="'+a.path+'" '+(a.complete?'':'')+'></td>'+
+      '<td><div class="name">'+a.album_id+'</div><div class="path">'+a.user+'</div></td>'+
+      '<td class="num">'+a.photo_count+'</td>'+
+      '<td><span class="badge '+state+'">'+stateTxt+'</span></td>'+
+      '<td class="num">'+fmtSize(a.total_bytes)+'</td></tr>';
+  }
+  body.innerHTML = html;
+}
+function toggleAll(){
+  const all = document.getElementById('selAll').checked;
+  document.querySelectorAll('.alchk').forEach(c=>c.checked=all);
+}
+function selectedPaths(){
+  return Array.from(document.querySelectorAll('.alchk:checked')).map(c=>c.dataset.path);
+}
+
+/* ============ 激活 ============ */
+async function doActivate(){
+  const key = document.getElementById('actKey').value.trim();
+  if(!/^[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/.test(key)){
+    document.getElementById('actErr').textContent='卡密格式不正确'; return;
+  }
+  const url = document.getElementById('serverUrl').value.trim();
+  const btn=document.getElementById('actBtn'); btn.disabled=true; btn.textContent='激活中…';
+  document.getElementById('actErr').textContent='';
+  const r = await api(API+'/activate', {method:'POST', body:JSON.stringify({key, server_url:url})});
+  if(!r.ok){ document.getElementById('actErr').textContent=r.j.error||'激活失败'; }
+  else{
+    document.getElementById('actErr').textContent='';
+    log('激活成功: '+key, 'ok');
+    loadStatus(); probe();
+  }
+  btn.disabled=false; btn.textContent='激活';
+}
+
+/* ============ 上传 ============ */
+async function doUpload(){
+  const paths = selectedPaths();
+  if(!paths.length){ document.getElementById('upErr').textContent='请先勾选要上传的相册'; return; }
+  document.getElementById('upErr').textContent='';
+  document.getElementById('upBtn').disabled=true;
+  const r = await api(API+'/upload', {method:'POST', body:JSON.stringify({album_paths:paths})});
+  if(!r.ok){ document.getElementById('upErr').textContent=r.j.error||'启动失败'; document.getElementById('upBtn').disabled=false; return; }
+  pollUpload();
+}
+async function pollUpload(){
+  const r = await api(API+'/upload/status');
+  if(r.ok) renderUpload(r.j);
+  if(r.ok && r.j.running){
+    setTimeout(pollUpload, 1200);
+  } else {
+    document.getElementById('upBtn').disabled=false;
+    if(r.ok && r.j.phase==='done'){ log('全部完成，服务器正在去水印…', 'ok'); refreshMe(); }
+    if(r.ok && r.j.phase==='error' && r.j.last_error) log('上传异常: '+r.j.last_error, 'bad');
+  }
+}
+function renderUpload(u){
+  if(!u) return;
+  document.getElementById('upPhase').textContent = u.running?'RUNNING':(u.phase.toUpperCase());
+  document.querySelectorAll('#phaseBar .ph').forEach(p=>{
+    const on = u.phase==='done' ? 'done' : (p.dataset.p===u.phase ? 'on' : '');
+    p.className='ph '+on;
+  });
+  document.getElementById('pFiles').textContent = u.done_files+' / '+u.total_files;
+  document.getElementById('pBytes').textContent = fmtSize(u.done_bytes)+' / '+fmtSize(u.total_bytes);
+  const pct = u.total_bytes ? Math.round(u.done_bytes*100/u.total_bytes) : 0;
+  document.getElementById('pFill').style.width = pct+'%';
+  document.getElementById('pPct').textContent = pct+'%';
+  document.getElementById('pCur').textContent = u.current || '—';
+}
+
+/* ============ 刷新卡密 ============ */
+async function refreshMe(){
+  const r = await api(API+'/me');
+  if(!r.ok){
+    document.getElementById('warnHost').classList.remove('hide');
+    document.getElementById('warnHostTxt').textContent = '无法连接服务器: '+(r.j.error||'');
+    return;
+  }
+  document.getElementById('warnHost').classList.add('hide');
+  if(r.j.tenant) renderCard(r.j.card, r.j.tenant);
+}
+
+/* ============ 启动 ============ */
+loadStatus().then(()=>{
+  const lic = ST.license.state;
+  if(lic !== 'none'){ probe(); }
+  pollUpload();
+});
+</script>
+</body>
+</html>
