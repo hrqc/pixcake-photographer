@@ -285,7 +285,10 @@
         <div class="panel">
           <div class="panel-head">
             <span class="tag">ALBUM</span><h2>相册列表</h2>
-            <span class="right"><label style="cursor:pointer"><input type="checkbox" id="selAll" onchange="toggleAll()" style="vertical-align:-2px"> 全选</label></span>
+            <span class="right">
+              <button class="btn ghost sm" id="refreshBtn" onclick="refreshAlbums()">刷新</button>
+              <label style="cursor:pointer"><input type="checkbox" id="selAll" onchange="toggleAll()" style="vertical-align:-2px"> 全选</label>
+            </span>
           </div>
           <div class="panel-body collapse">
             <div style="max-height:300px; overflow:auto">
@@ -597,6 +600,19 @@ async function loadAlbums(){
 function toggleAll(){
   const all = document.getElementById('selAll').checked;
   document.querySelectorAll('.alchk').forEach(c=>c.checked=all);
+}
+async function refreshAlbums(){
+  const btn = document.getElementById('refreshBtn');
+  const old = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '刷新中…';
+  try{
+    await loadAlbums();
+    btn.textContent = '✓ 已刷新';
+  }catch(e){
+    btn.textContent = '刷新失败';
+  }
+  setTimeout(()=>{ btn.disabled = false; btn.textContent = old; }, 1500);
 }
 function selectedPaths(){
   return Array.from(document.querySelectorAll('.alchk:checked')).map(c=>c.dataset.path);
