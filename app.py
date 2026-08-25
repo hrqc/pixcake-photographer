@@ -47,6 +47,53 @@ def _get_remote():
         return _remote
 
 
+_verify_state = {'state': None, 'reason': None}   # state: None/ok/expired/quota/locked
+_verify_lock = threading.Lock()
+
+
+def _verify_loop():
+    """后台周期回连服务器校验卡密状态 (服务端权威).
+    每 45 秒一次; 服务端禁用/不存在/设备不符 → locked (前端进激活闸门),
+    过期/超额 → expired/quota (走警告条+换卡入口); valid 时回写本地额度/到期
+    (管理员加张数/延期立即生效). 网络异常时保持上一次判定, 由本地判断兜底."""
+    while True:
+        try:
+            lic = config.get('license')
+            if not lic or not isinstance(lic, dict) or not lic.get('key'):
+                with _verify_lock:
+                    _verify_state['state'] = None
+                    _verify_state['reason'] = None
+            else:
+                try:
+                    j = _get_remote().verify(lic['key'])
+                    with _verify_lock:
+                        if j.get('valid'):
+                            _verify_state['state'] = 'ok'
+                            _verify_state['reason'] = None
+                            p = j.get('payload') or {}
+                            cur = dict(lic)
+                            dirty = False
+                            for fld in ('expires_at', 'quota', 'quota_used', 'plan_name'):
+                                if p.get(fld) is not None and cur.get(fld) != p[fld]:
+                                    cur[fld] = p[fld]
+                                    dirty = True
+                            if dirty:
+                                config.set_many(license=cur)
+                        else:
+                            reason = j.get('reason') or 'disabled'
+                            if reason in ('expired', 'quota'):
+                                _verify_state['state'] = reason
+                                _verify_state['reason'] = reason
+                            else:
+                                _verify_state['state'] = 'locked'
+                                _verify_state['reason'] = reason
+                except remote.RemoteError:
+                    pass  # 网络异常: 保持上一次判定, 本地兜底
+        except Exception:
+            pass
+        time.sleep(45)
+
+
 def probe_workspace():
     """返回已存在的候选路径 + 当前配置的工作区."""
     found = []
@@ -64,9 +111,21 @@ def scanner_default():
 
 
 def license_status(lic):
-    """lic: config.license dict 或 None. 返回 state: none/ok/expired/quota/device/tampered."""
+    """lic: config.license dict 或 None. 返回 state: none/ok/expired/quota/device/locked.
+    服务端周期回连结果优先 (权威); 未回连/网络异常时用本地判断兜底."""
     if not lic or not isinstance(lic, dict):
         return {'state': 'none', 'info': None}
+    with _verify_lock:
+        vs, vr = _verify_state['state'], _verify_state['reason']
+    if vs == 'expired':
+        return {'state': 'expired', 'info': lic, 'reason': 'expired'}
+    if vs == 'quota':
+        return {'state': 'quota', 'info': lic, 'reason': 'quota'}
+    if vs == 'locked':
+        return {'state': 'locked', 'info': lic, 'reason': vr or 'disabled'}
+    if vs == 'ok':
+        return {'state': 'ok', 'info': lic}
+    # 本地兜底 (尚未回连 / 网络异常)
     if lic.get('machine') and lic['machine'] != machine_fp():
         return {'state': 'device', 'info': lic}
     exp = lic.get('expires_at') or 0
@@ -305,5 +364,6 @@ class PhotographerServer(ThreadingHTTPServer):
 
 
 def start(port=9699):
+    threading.Thread(target=_verify_loop, daemon=True).start()
     srv = PhotographerServer(('127.0.0.1', port), Handler)
     return srv

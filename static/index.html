@@ -405,11 +405,21 @@ async function loadStatus(){
   ST = r.j;
   document.getElementById('topFp').textContent = ST.machine;
   const lic = ST.license;
-  document.getElementById('topState').textContent = {ok:'正常', none:'未激活', expired:'已过期', quota:'额度用尽', device:'设备不符'}[lic.state] || lic.state;
-  setLed(document.getElementById('topLed'), {ok:'green', expired:'red', quota:'amber', device:'red'}[lic.state] || 'gray');
+  document.getElementById('topState').textContent = {ok:'正常', none:'未激活', expired:'已过期', quota:'额度用尽', device:'设备不符', locked:'已被锁定'}[lic.state] || lic.state;
+  setLed(document.getElementById('topLed'), {ok:'green', expired:'red', quota:'amber', device:'red', locked:'red'}[lic.state] || 'gray');
   if(lic.state === 'none'){
     document.getElementById('gateTitle').textContent = '⚡ 系统未激活';
     document.getElementById('gateSub').textContent = '请使用从管理员处购买的卡密激活本客户端';
+    document.getElementById('gate').classList.remove('hide');
+    document.getElementById('dash').classList.add('hide');
+    if(ST.server_url && ST.server_url !== 'https://hrqc105.icu')
+      document.getElementById('serverUrl').value = ST.server_url;
+    return;
+  }
+  if(lic.state === 'locked'){
+    const why = {disabled:'卡密已被禁用', unused:'卡密在服务器不存在', none:'卡密在服务器不存在', device:'卡密已绑定其他设备'}[lic.reason] || '授权已被锁定';
+    document.getElementById('gateTitle').textContent = '⚡ '+why;
+    document.getElementById('gateSub').textContent = '请联系管理员处理，或输入新的卡密';
     document.getElementById('gate').classList.remove('hide');
     document.getElementById('dash').classList.add('hide');
     if(ST.server_url && ST.server_url !== 'https://hrqc105.icu')
