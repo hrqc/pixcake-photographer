@@ -16,6 +16,14 @@ import scanner
 import uploader
 from machine import machine_fp
 
+# 原生目录选择框 (tkinter; 顶层 import 让 PyInstaller 打包进去, 无 tkinter 系统优雅降级)
+try:
+    import tkinter as _tk  # noqa: F401
+    _HAS_TK = True
+except Exception:
+    _tk = None
+    _HAS_TK = False
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 INDEX_HTML = os.path.join(getattr(sys, '_MEIPASS', HERE), 'static', 'index.html')
 
@@ -39,55 +47,79 @@ _SKIP_DIRS = frozenset({
 })
 
 
+def _log(msg):
+    """写客户端日志到 ~/.pixcake-photographer/client.log (远程诊断用)."""
+    try:
+        d = config.data_dir()
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, 'client.log'), 'a', encoding='utf-8') as f:
+            f.write('%s  %s\n' % (time.strftime('%m-%d %H:%M:%S'), msg))
+    except Exception:
+        pass
+
+
+def _listdir_safe(d):
+    try:
+        return os.listdir(d)
+    except OSError:
+        return []
+
+
 def _is_album_root(d):
     """d 是否为相册根: 存在 <d>/<user>/<album>/thumbnail_cache."""
-    try:
-        for u in os.listdir(d):
-            up = os.path.join(d, u)
-            if os.path.isdir(up):
-                try:
-                    for a in os.listdir(up):
-                        if os.path.isdir(os.path.join(up, a, 'thumbnail_cache')):
-                            return True
-                except OSError:
-                    continue
-    except OSError:
-        pass
+    for u in _listdir_safe(d):
+        up = os.path.join(d, u)
+        if os.path.isdir(up):
+            for a in _listdir_safe(up):
+                if os.path.isdir(os.path.join(up, a, 'thumbnail_cache')):
+                    return True
     return False
 
 
-def _workspace_inside(p):
-    """在 p 内部寻找真正的相册根, 找不到返回 None.
-    探测: p 本身 / p/project / p 的每个直接子目录及其 project 子目录."""
-    cand = [p]
-    proj = os.path.join(p, 'project')
-    if os.path.isdir(proj):
-        cand.append(proj)
-    try:
-        for name in os.listdir(p):
-            q = os.path.join(p, name)
-            if os.path.isdir(q):
-                cand.append(q)
-                qp = os.path.join(q, 'project')
-                if os.path.isdir(qp):
-                    cand.append(qp)
-    except OSError:
-        pass
-    for c in cand:
-        if _is_album_root(c):
-            return c
+def _find_workspace_deep(p, depth=5):
+    """在 p 内部有界递归寻找相册根 (用户手填/浏览时用, 允许进入 Program Files 等).
+    命中即返回, 找不到返回 None."""
+    if _is_album_root(p):
+        return p
+    if depth <= 0:
+        return None
+    for name in _listdir_safe(p):
+        if name.lower() in _SKIP_DIRS:
+            continue
+        q = os.path.join(p, name)
+        if os.path.isdir(q):
+            hit = _find_workspace_deep(q, depth - 1)
+            if hit:
+                return hit
     return None
 
 
+def _resolve_workspace(ws):
+    """接受用户输入/浏览选中的目录, 尽力返回真正的相册根.
+    - 目录不存在 → None
+    - 目录存在 → 有界深搜(depth5)定位相册根; 找不到再查父目录 (应对填了安装文件夹)
+    - 仍找不到 → 原样返回 (让前端提示, 不锁死用户)"""
+    if not ws:
+        return None
+    ws = ws.strip().strip('"').strip("'")
+    if not os.path.isdir(ws):
+        return None
+    hit = _find_workspace_deep(ws, 5)
+    if hit:
+        return hit
+    parent = os.path.dirname(ws)
+    if parent and os.path.isdir(parent):
+        hit = _find_workspace_deep(parent, 2)
+        if hit:
+            return hit
+    return ws
+
+
 def _search(d, depth, max_depth, _add):
-    """有界深度搜索工作区; 命中标记名目录才检查内部, 避免全盘 listdir."""
+    """有界深度搜索工作区; 命中标记名目录才下钻检查, 避免全盘 listdir."""
     if depth >= max_depth:
         return
-    try:
-        names = os.listdir(d)
-    except OSError:
-        return
-    for name in names:
+    for name in _listdir_safe(d):
         if name.lower() in _SKIP_DIRS:
             continue
         p = os.path.join(d, name)
@@ -95,16 +127,16 @@ def _search(d, depth, max_depth, _add):
             continue
         low = name.lower()
         if 'pixcake' in low or name == '像素蛋糕' or name == 'xsdg' or name == 'project':
-            ws = _workspace_inside(p)
-            if ws:
-                _add(ws)
+            hit = _find_workspace_deep(p, 3)
+            if hit:
+                _add(hit)
                 continue
         _search(p, depth + 1, max_depth, _add)
 
 
 def _discover_workspaces():
     """返回所有探测到的工作区相册根 (绝对路径), 去重.
-    顺序: 已知候选路径 → 常见盘符/用户目录有界搜索."""
+    顺序: 已知候选路径 → 所有盘符 + 用户目录 有界搜索."""
     found, seen = [], set()
 
     def _add(p):
@@ -116,24 +148,14 @@ def _discover_workspaces():
     for p in WS_CANDIDATES:
         if os.path.isdir(p) and _is_album_root(p):
             _add(p)
-    for root in (os.path.expanduser('~'), 'C:/', 'D:/', 'E:/', 'F:/'):
+    roots = [os.path.expanduser('~')]
+    for letter in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
+        root = '%s:/' % letter
         if os.path.isdir(root):
-            _search(root, 0, 4, _add)
+            roots.append(root)
+    for root in roots:
+        _search(root, 0, 4, _add)
     return found
-
-
-def _resolve_workspace(ws):
-    """接受用户输入的工作区路径, 尽力返回真正的相册根.
-    - 目录不存在 → None
-    - 目录存在: 自动向下定位 (Workspace 根 → project; 任意层 → 内部相册根)
-    - 存在但内部无相册结构 → 原样返回 (让前端提示, 不锁死用户)"""
-    if not ws:
-        return None
-    ws = ws.strip().strip('"').strip("'")
-    if not os.path.isdir(ws):
-        return None
-    hit = _workspace_inside(ws)
-    return hit or ws
 
 
 import threading
@@ -201,9 +223,15 @@ def _verify_loop():
 
 def probe_workspace():
     """返回探测到的工作区(相册根)候选 + 当前配置的工作区."""
-    return {'candidates': _discover_workspaces(),
-            'current': (config.get('workspace') or '').strip(),
-            'default': scanner_default()}
+    try:
+        cands = _discover_workspaces()
+    except Exception as exc:
+        _log('probe_workspace 异常: %r' % (exc,))
+        cands = []
+    cur = (config.get('workspace') or '').strip()
+    out = {'candidates': cands, 'current': cur, 'default': scanner_default()}
+    _log('探测工作区: candidates=%d current=%r' % (len(cands), cur))
+    return out
 
 
 def scanner_default():
@@ -305,44 +333,55 @@ class Handler(BaseHTTPRequestHandler):
     # ---------------- 路由 ----------------
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
-        if path in ('/', '/index.html'):
-            self._serve_index()
-            return
-        if path == '/api/status':
-            self._json(build_status())
-            return
-        if path == '/api/workspace':
-            self._json(probe_workspace())
-            return
-        if path == '/api/albums':
-            self._albums_get()
-            return
-        if path == '/api/upload/status':
-            self._json(_uploader.snapshot())
-            return
-        if path == '/api/me':
-            self._me_get()
-            return
-        self._json({'error': 'not found'}, 404)
+        try:
+            if path in ('/', '/index.html'):
+                self._serve_index()
+                return
+            if path == '/api/status':
+                self._json(build_status())
+                return
+            if path == '/api/workspace':
+                self._json(probe_workspace())
+                return
+            if path == '/api/albums':
+                self._albums_get()
+                return
+            if path == '/api/upload/status':
+                self._json(_uploader.snapshot())
+                return
+            if path == '/api/me':
+                self._me_get()
+                return
+            self._json({'error': 'not found'}, 404)
+        except Exception as exc:
+            _log('GET %s 异常: %r' % (path, exc))
+            self._json({'error': '服务器错误: %s' % exc}, 500)
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
         body = self._read_json()
         if body is None:
             return
-        if path == '/api/config':
-            self._config_post(body)
-            return
-        if path == '/api/activate':
-            self._activate_post(body)
-            return
-        if path == '/api/upload':
-            self._upload_post(body)
-            return
-        if path == '/api/scan':
-            self._scan_post(body)
-            return
-        self._json({'error': 'not found'}, 404)
+        try:
+            if path == '/api/config':
+                self._config_post(body)
+                return
+            if path == '/api/pickdir':
+                self._pickdir_post()
+                return
+            if path == '/api/activate':
+                self._activate_post(body)
+                return
+            if path == '/api/upload':
+                self._upload_post(body)
+                return
+            if path == '/api/scan':
+                self._scan_post(body)
+                return
+            self._json({'error': 'not found'}, 404)
+        except Exception as exc:
+            _log('POST %s 异常: %r' % (path, exc))
+            self._json({'error': '服务器错误: %s' % exc}, 500)
 
     # ---------------- 实现 ----------------
     def _config_post(self, body):
@@ -361,9 +400,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
             resolved = _resolve_workspace(ws)
             if resolved is None:
+                _log('设置工作区失败: %s 目录不存在' % ws)
                 self._json({'error': '目录不存在: %s' % ws}, 400)
                 return
             cfg['workspace'] = resolved
+            _log('设置工作区: %s → %s' % (ws, resolved))
             if os.path.normpath(resolved) != os.path.normpath(ws):
                 note = '已自动定位到相册目录: %s' % resolved
         if cfg:
@@ -374,6 +415,34 @@ class Handler(BaseHTTPRequestHandler):
         if note:
             resp['note'] = note
         self._json(resp)
+
+    def _pickdir_post(self):
+        """弹出系统原生目录选择框 (tkinter), 返回用户选中的绝对路径."""
+        if not _HAS_TK:
+            self._json({'error': '此系统不支持原生目录选择，请手动输入路径'}, 400)
+            return
+        try:
+            from tkinter import filedialog
+            root = _tk.Tk()
+            root.withdraw()
+            root.attributes('-topmost', True)
+            root.update()
+            chosen = filedialog.askdirectory(
+                parent=root, title='选择像素蛋糕工作区目录（含 thumbnail_cache 的文件夹）')
+            root.destroy()
+        except Exception as exc:
+            _log('目录选择框异常: %r' % (exc,))
+            try:
+                root.destroy()
+            except Exception:
+                pass
+            self._json({'error': '打开目录选择框失败: %s' % exc}, 400)
+            return
+        if chosen:
+            _log('浏览选中: %s' % chosen)
+            self._json({'ok': True, 'path': chosen})
+        else:
+            self._json({'ok': False, 'error': '未选择目录'})
 
     def _activate_post(self, body):
         key = (body.get('key') or '').strip().upper()

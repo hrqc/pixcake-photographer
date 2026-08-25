@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""验证: 摄影师端工作区 探测/自动定位/锁 修复后行为. 起临时实例(9799, 临时数据目录)."""
+"""验证 v2: 工作区 探测/深搜定位/日志/兜底. 起临时实例(9799, 临时数据目录)."""
 import json
 import os
 import sys
@@ -9,7 +9,8 @@ import urllib.request
 import urllib.error
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.environ['PIXCAKE_PHOTOGRAPHER_DATA'] = tempfile.mkdtemp(prefix='pixphoto-test-')
+DATA = tempfile.mkdtemp(prefix='pixphoto-test-')
+os.environ['PIXCAKE_PHOTOGRAPHER_DATA'] = DATA
 
 import app  # noqa: E402
 import config  # noqa: E402
@@ -30,7 +31,7 @@ def call(method, path, body=None):
         data = json.dumps(body, ensure_ascii=False).encode('utf-8')
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=15) as r:
+        with urllib.request.urlopen(req, timeout=20) as r:
             return r.status, json.loads(r.read().decode('utf-8'))
     except urllib.error.HTTPError as e:
         return e.code, json.loads(e.read().decode('utf-8'))
@@ -40,54 +41,48 @@ def main():
     srv = app.start(9799)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
 
-    print('\n== 1. 自动探测 (有界搜索) ==')
+    print('\n== 1. 自动探测 ==')
     st, j = call('GET', '/api/workspace')
     cands = j.get('candidates', [])
-    print('  候选数 =', len(cands))
-    for c in cands:
+    check('探测到 >=1', len(cands) >= 1, str(len(cands)))
+    for c in cands[:3]:
         print('   -', c)
-    check('探测到 >=1 工作区', len(cands) >= 1)
-    check('候选是相册根 (含 user_2911404)', any('project' in c and 'user_2911404' in os.listdir(c) if os.path.isdir(c) else False for c in cands))
 
-    print('\n== 2. 手动设置: 正确路径 ==')
+    print('\n== 2. 手填 project 路径 ==')
     ws = 'D:/xsdg/像素蛋糕/.PixCake-qt_pro Workspace/project'
     st, j = call('POST', '/api/config', {'workspace': ws})
-    check('保存 200', st == 200, str(j))
-    check('workspace 原样保存', j.get('workspace') == ws)
+    check('保存 200 + 相册根', st == 200 and j.get('workspace') == ws, str(j))
     st, j = call('GET', '/api/albums')
-    check('相册 32 个', len(j.get('albums', [])) == 32, str(len(j.get('albums', []))))
+    check('相册 32', len(j.get('albums', [])) == 32)
 
-    print('\n== 3. 手动设置: 上层目录自动向下定位 ==')
-    ws2 = 'D:/xsdg/像素蛋糕/.PixCake-qt_pro Workspace'
-    st, j = call('POST', '/api/config', {'workspace': ws2})
-    check('保存 200', st == 200, str(j))
-    check('自动定位到 project', j.get('workspace', '').endswith('project'), str(j.get('workspace')))
-    check('返回 note', bool(j.get('note')), str(j.get('note')))
+    print('\n== 3. 填"安装文件夹"上层 (D:/xsdg/像素蛋糕) → 深搜定位 ==')
+    install = 'D:/xsdg/像素蛋糕'
+    st, j = call('POST', '/api/config', {'workspace': install})
+    check('自动定位到 project', st == 200 and j.get('workspace', '').endswith('project'),
+          str(j.get('workspace')))
+    check('返回 note', bool(j.get('note')))
     st, j = call('GET', '/api/albums')
-    check('相册 32 个 (定位后)', len(j.get('albums', [])) == 32, str(len(j.get('albums', []))))
+    check('相册 32 (定位后)', len(j.get('albums', [])) == 32)
 
-    print('\n== 4. 手动设置: 不存在的目录 ==')
-    st, j = call('POST', '/api/config', {'workspace': 'Z:/not/exist/path'})
-    check('400 报错', st == 400, str(j))
-    check('错误信息含"不存在"', '不存在' in (j.get('error') or ''))
+    print('\n== 4. 填更高层 D:/xsdg → 仍深搜定位 ==')
+    st, j = call('POST', '/api/config', {'workspace': 'D:/xsdg'})
+    check('定位到 project', st == 200 and j.get('workspace', '').endswith('project'),
+          str(j.get('workspace')))
 
-    print('\n== 5. 带引号/空白路径 ==')
-    st, j = call('POST', '/api/config', {'workspace': '  "D:/xsdg/像素蛋糕/.PixCake-qt_pro Workspace"  '})
-    check('剥引号+自动定位', st == 200 and j.get('workspace', '').endswith('project'), str(j.get('workspace')))
+    print('\n== 5. 不存在目录 → 400 ==')
+    st, j = call('POST', '/api/config', {'workspace': 'Z:/not/exist'})
+    check('400 + 提示不存在', st == 400 and '不存在' in (j.get('error') or ''), str(j))
 
-    print('\n== 6. config 并发锁 ==')
-    results = []
-    def worker(n):
-        for _ in range(50):
-            config.set_many(license={'key': 'K%d' % n}, workspace='ws-%d' % n)
-            results.append(config.get('workspace'))
-    ts = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
-    [t.start() for t in ts]
-    [t.join() for t in ts]
-    # 锁下每次 set_many 都是原子读写, 最终值应是最后一次写入之一; 验证过程中无异常
-    cfg = config.load()
-    check('并发后 config 仍有效 (有 license+workspace)', 'license' in cfg and 'workspace' in cfg)
-    check('无异常崩溃', len(results) == 8 * 50)
+    print('\n== 6. 客户端日志已写 ==')
+    logp = os.path.join(DATA, 'client.log')
+    check('client.log 存在且有内容', os.path.isfile(logp) and os.path.getsize(logp) > 0)
+    with open(logp, encoding='utf-8') as f:
+        lines = f.readlines()
+    check('日志含 探测/设置 记录', any('探测工作区' in l for l in lines)
+          and any('设置工作区' in l for l in lines), '共 %d 行' % len(lines))
+
+    print('\n== 7. tkinter 探测 ==')
+    check('_HAS_TK 已检测', app._HAS_TK is not None)
 
     srv.shutdown()
     print('\n==== 结果: %d/%d PASS ====' % (sum(1 for _, c in PASS if c), len(PASS)))

@@ -241,6 +241,7 @@
 
   <!-- 主界面 -->
   <div id="dash" class="hide">
+    <div id="errBanner" class="warnbar error hide"><span>⚠</span><span id="errBannerTxt">界面错误</span></div>
     <div id="warnHost" class="warnbar hide">
       <span>⚠</span><span id="warnHostTxt">无法连接服务器</span>
       <a href="javascript:refreshMe()">重试</a>
@@ -262,15 +263,20 @@
           </div>
           <div class="panel-body">
             <label class="formlabel" style="margin-top:0">自动探测结果</label>
-            <select class="select" id="wsSelect" onchange="setWs(this.value)">
-              <option value="">— 未找到，请手动填写 —</option>
-            </select>
+            <div class="keyrow" style="margin-bottom:8px">
+              <select class="select" id="wsSelect" onchange="setWs(this.value)">
+                <option value="">— 正在探测… —</option>
+              </select>
+              <button class="btn ghost sm" onclick="probe()">重新探测</button>
+            </div>
             <div class="pathline" id="wsPath"><span class="dot">◆</span> 未设置</div>
-            <label class="formlabel">或手动输入工作区路径</label>
+            <label class="formlabel">或点“浏览”选择像素蛋糕工作区</label>
             <div class="keyrow">
-              <input id="wsManual" placeholder="D:/xsdg/像素蛋糕/.PixCake-qt_pro Workspace/project" style="font-size:12px; letter-spacing:0">
+              <input id="wsManual" placeholder="点击“浏览”选文件夹，或粘贴工作区路径" style="font-size:12px; letter-spacing:0">
+              <button class="btn ghost sm" onclick="browseWs()">浏览…</button>
               <button class="btn ghost sm" onclick="setWs(document.getElementById('wsManual').value.trim())">设置</button>
             </div>
+            <div class="hint">工作区 = 像素蛋糕“工作区位置”里的 <b>project</b> 子目录（含相册）；填了上级目录会自动向下定位</div>
             <div class="err" id="wsErr"></div>
           </div>
         </div>
@@ -395,9 +401,21 @@ function log(msg, cls){
   logEl.scrollTop = logEl.scrollHeight;
 }
 function setLed(el, cls){ el.className='led '+cls; }
-function api(url, opts){
-  return fetch(url, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}))
-    .then(r=>r.json().then(j=>({ok:r.ok, status:r.status, j})));
+window.onerror = function(msg, src, line){
+  var b=document.getElementById('errBanner'), t=document.getElementById('errBannerTxt');
+  if(b && t){ b.classList.remove('hide'); t.textContent='界面脚本错误: '+msg+' @'+(line||'?'); }
+  return false;
+};
+// api() 永不 reject: 任何网络/解析失败都变成 {ok:false, j:{error}} 让调用方显示
+async function api(url, opts){
+  try{
+    const r = await fetch(url, Object.assign({headers:{'Content-Type':'application/json'}}, opts||{}));
+    let j = {};
+    try{ j = await r.json(); }catch(e){ j = {error:'响应格式错误'}; }
+    return {ok:r.ok, status:r.status, j};
+  }catch(e){
+    return {ok:false, status:0, j:{error:'无法连接本地服务: '+(e.message||e)}};
+  }
 }
 
 /* ============ 状态 ============ */
@@ -499,44 +517,56 @@ function renderCard(card, tenant){
 
 /* ============ 工作区 ============ */
 async function probe(){
-  const r = await api(API+'/workspace');
+  const errEl = document.getElementById('wsErr');
   const sel = document.getElementById('wsSelect');
+  sel.innerHTML = '<option value="">— 正在探测… —</option>';
+  const r = await api(API+'/workspace');
   sel.innerHTML = '';
-  const seen = new Set();
-  if(r.j.current){ seen.add(r.j.current); }
-  if(r.j.candidates.length===0){
-    sel.innerHTML = '<option value="">— 未找到工作区 —</option>';
+  if(!r.ok || !r.j || !Array.isArray(r.j.candidates)){
+    sel.innerHTML = '<option value="">— 探测失败 —</option>';
+    errEl.className='err';
+    errEl.textContent = (r.j && r.j.error) || '探测失败';
+    return;
   }
-  for(const c of r.j.candidates){
-    seen.add(c);
+  const cands = r.j.candidates, cur = r.j.current || '';
+  if(cands.length===0){
+    sel.innerHTML = '<option value="">— 未找到工作区，请点“浏览”或手动填写 —</option>';
+  }
+  for(const c of cands){
     const o=document.createElement('option'); o.value=c; o.textContent=c;
-    if(c===r.j.current) o.selected=true;
+    if(c===cur) o.selected=true;
     sel.appendChild(o);
   }
-  if(!r.j.candidates.length && r.j.current){ const o=document.createElement('option'); o.value=r.j.current; o.textContent=r.j.current+' (当前)'; o.selected=true; sel.appendChild(o); }
-  document.getElementById('wsPath').innerHTML = '<span class="dot">◆</span> '+(r.j.current||'未设置');
-  document.getElementById('wsPathShort').textContent = (r.j.current? r.j.current.split(/[\\\/]/).pop() : '未设置');
+  if(!cands.length && cur){ const o=document.createElement('option'); o.value=cur; o.textContent=cur+' (当前)'; o.selected=true; sel.appendChild(o); }
+  document.getElementById('wsPath').innerHTML = '<span class="dot">◆</span> '+(cur||'未设置');
+  document.getElementById('wsPathShort').textContent = (cur? cur.split(/[\\\/]/).pop() : '未设置');
   // 仅探测到一个工作区且尚未设置 → 自动选用 (免去手动粘贴)
-  if(!r.j.current && r.j.candidates.length===1){ setWs(r.j.candidates[0]); return; }
-  if(r.j.current) await loadAlbums();
+  if(!cur && cands.length===1){ setWs(cands[0]); return; }
+  if(cur) await loadAlbums();
+}
+async function browseWs(){
+  const errEl = document.getElementById('wsErr');
+  errEl.className='err'; errEl.textContent='';
+  const r = await api(API+'/pickdir', {method:'POST', body:'{}'});
+  if(!r.ok || !r.j.path){
+    errEl.textContent = (r.j && r.j.error) || '未选择目录';
+    return;
+  }
+  document.getElementById('wsManual').value = r.j.path;
+  setWs(r.j.path);
 }
 async function setWs(path){
   if(!path){ return; }
   const errEl = document.getElementById('wsErr');
   errEl.className='err'; errEl.textContent='';
-  let r;
-  try{
-    r = await api(API+'/config', {method:'POST', body:JSON.stringify({workspace:path})});
-  }catch(e){
-    errEl.textContent = '设置请求失败: '+(e.message||e);
-    return;
-  }
-  if(!r.ok){ errEl.textContent = r.j.error||'设置失败'; return; }
+  const r = await api(API+'/config', {method:'POST', body:JSON.stringify({workspace:path})});
+  if(!r.ok){ errEl.textContent = (r.j && r.j.error) || '设置失败'; return; }
   await probe();
   if(r.j.note){ errEl.className='err ok'; errEl.textContent = r.j.note; }
+  else if(r.j.workspace){ errEl.className='err ok'; errEl.textContent = '工作区已保存: '+r.j.workspace; }
   if(r.j.workspace && albums.length===0){
     errEl.className='err';
-    errEl.textContent='工作区已保存，但目录下没找到相册（缺少 thumbnail_cache）。若粘贴的是像素蛋糕的上级目录，系统会自动向下定位到相册目录。';
+    errEl.textContent='工作区已保存，但目录下没找到相册（缺少 thumbnail_cache）。若填的是像素蛋糕的上级目录，会自动向下定位；仍不行请点“浏览”选 project 目录。';
   }
 }
 
