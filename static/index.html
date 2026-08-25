@@ -424,12 +424,19 @@ function renderLic(lic){
   document.getElementById('licBody').innerHTML = html;
 }
 
+function timeLeft(card){
+  if(!card.expires_at) return '0天';
+  const mins = Math.max(0, Math.ceil((card.expires_at*1000 - Date.now())/60000));
+  if(mins < 60) return mins + '分钟';
+  if(mins < 1440) return Math.ceil(mins/60) + '小时';
+  return (card.left_days ?? 0) + '天';
+}
 function renderCard(card, tenant){
-  const expired = card.status==='expired' || (!card.unlimited_time && card.left_days===0);
+  const expired = card.expired===true || card.status==='expired' || (card.expires_at && card.expires_at*1000 <= Date.now());
   let left;
   if(card.unlimited_time) left='<span class="green">不限时</span>';
   else if(expired) left='<span class="red">已过期</span>';
-  else left='<span class="green">'+fmtDate(card.expires_at)+'</span>';
+  else left='<span class="green">剩 '+timeLeft(card)+'</span>';
   let quotaTxt;
   if(card.unlimited_quota) quotaTxt='<span class="green">不限张</span>';
   else quotaTxt='<span class="'+(card.remaining>0?'amber':'red')+'">'+Math.max(0,card.remaining)+' / '+card.quota+' 张</span>';
