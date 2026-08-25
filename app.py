@@ -174,6 +174,25 @@ def _get_remote():
         return _remote
 
 
+def _ensure_tenant_session():
+    """确保租户会话存在: 无 g cookie 且本地有卡密时自动重新登录.
+    租户会话只存内存, 软件重启即丢, 此前只在激活时登录一次 → 重启后
+    所有租户接口都被服务器 401「摄影师未登录」. 这里每次调用前自动补会话.
+    返回 None(会话就绪) 或错误信息."""
+    lic = config.get('license')
+    if not lic or not isinstance(lic, dict) or not lic.get('key'):
+        return '尚未激活卡密'
+    r = _get_remote()
+    if r._cookies.get('g'):
+        return None
+    try:
+        r.tenant_login(lic['key'])
+        return None
+    except remote.RemoteError as exc:
+        _log('租户自动登录失败: %s' % exc.message)
+        return exc.message
+
+
 _verify_state = {'state': None, 'reason': None}   # state: None/ok/expired/quota/locked
 _verify_lock = threading.Lock()
 
@@ -278,14 +297,18 @@ def build_status():
         'license': st,
         'upload': _uploader.snapshot(),
     }
-    # 尝试在线刷新卡密状态 (已登录会话)
+    # 尝试在线刷新卡密状态 (已登录会话; 无会话先自动登录)
     if st['state'] in ('ok', 'quota', 'expired'):
-        try:
-            me = _get_remote().tenant_me()
-            out['remote'] = {'tenant': me.get('tenant'), 'card': me.get('card'),
-                             'stats': me.get('stats')}
-        except remote.RemoteError as exc:
-            out['remote'] = {'error': exc.message}
+        err = _ensure_tenant_session()
+        if err:
+            out['remote'] = {'error': err}
+        else:
+            try:
+                me = _get_remote().tenant_me()
+                out['remote'] = {'tenant': me.get('tenant'), 'card': me.get('card'),
+                                 'stats': me.get('stats')}
+            except remote.RemoteError as exc:
+                out['remote'] = {'error': exc.message}
     return out
 
 
@@ -521,6 +544,10 @@ class Handler(BaseHTTPRequestHandler):
         if not real:
             self._json({'error': '没有有效的相册目录'}, 400)
             return
+        err = _ensure_tenant_session()
+        if err:
+            self._json({'error': err}, 401)
+            return
         ok, msg = _uploader.start(_get_remote(), real)
         if not ok:
             self._json({'error': msg}, 409)
@@ -529,6 +556,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def _scan_post(self, body):
         try:
+            err = _ensure_tenant_session()
+            if err:
+                self._json({'error': err}, 401)
+                return
             _get_remote().tenant_scan()
             self._json({'ok': True})
         except remote.RemoteError as exc:
@@ -536,6 +567,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def _me_get(self):
         try:
+            err = _ensure_tenant_session()
+            if err:
+                self._json({'error': err}, 401)
+                return
             self._json(_get_remote().tenant_me())
         except remote.RemoteError as exc:
             self._json({'error': exc.message}, exc.status or 400)
