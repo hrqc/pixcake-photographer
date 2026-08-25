@@ -223,8 +223,8 @@
 
   <!-- 激活门 -->
   <div class="gate" id="gate">
-    <h1>⚡ 系统未激活</h1>
-    <div class="sub">请使用从管理员处购买的卡密激活本客户端</div>
+    <h1 id="gateTitle">⚡ 系统未激活</h1>
+    <div class="sub" id="gateSub">请使用从管理员处购买的卡密激活本客户端</div>
     <label class="formlabel" style="margin-top:0">服务器地址</label>
     <div class="keyrow">
       <input id="serverUrl" value="" placeholder="https://hrqc105.icu" style="font-size:13px; letter-spacing:0">
@@ -247,6 +247,7 @@
     <div id="warnQuota" class="warnbar error hide">
       <span>⚠</span><span class="big" id="warnQuotaTxt">卡密已过期 / 张数已用完</span>
       <span id="warnContact">请联系管理员购买卡密</span>
+      <button class="btn sm ghost" style="margin-left:auto; white-space:nowrap" onclick="showGate()">更换卡密</button>
     </div>
 
     <div class="grid">
@@ -382,6 +383,8 @@ async function loadStatus(){
   document.getElementById('topState').textContent = {ok:'正常', none:'未激活', expired:'已过期', quota:'额度用尽', device:'设备不符'}[lic.state] || lic.state;
   setLed(document.getElementById('topLed'), {ok:'green', expired:'red', quota:'amber', device:'red'}[lic.state] || 'gray');
   if(lic.state === 'none'){
+    document.getElementById('gateTitle').textContent = '⚡ 系统未激活';
+    document.getElementById('gateSub').textContent = '请使用从管理员处购买的卡密激活本客户端';
     document.getElementById('gate').classList.remove('hide');
     document.getElementById('dash').classList.add('hide');
     if(ST.server_url && ST.server_url !== 'https://hrqc105.icu')
@@ -405,6 +408,13 @@ async function loadStatus(){
   }
   renderUpload(ST.upload);
   renderWorkspace(ST.workspace || '');
+  // 本地已过期/额度用完: 强制显示警告条 (含"更换卡密"入口), 无论远端会话是否可用
+  if(lic.state==='expired' || lic.state==='quota'){
+    document.getElementById('warnQuota').classList.remove('hide');
+    document.getElementById('warnQuotaTxt').textContent = lic.state==='expired' ? '卡密已过期' : '张数额度已用完';
+    const contact = (ST.remote && ST.remote.tenant && ST.remote.tenant.admin_contact) || '';
+    document.getElementById('warnContact').textContent = contact ? '管理员联系: '+contact : '请联系管理员购买卡密进行续费/充值';
+  }
 }
 
 function renderLic(lic){
@@ -521,6 +531,16 @@ function selectedPaths(){
 }
 
 /* ============ 激活 ============ */
+function showGate(){
+  const gate = document.getElementById('gate');
+  document.getElementById('gateTitle').textContent = '⚡ 更换卡密';
+  document.getElementById('gateSub').textContent = '当前卡密已到期或额度用完。输入新卡密继续使用，站点与已上传相册自动保留。';
+  if(ST && ST.server_url) document.getElementById('serverUrl').value = ST.server_url;
+  document.getElementById('actKey').value = '';
+  document.getElementById('actErr').textContent = '';
+  gate.classList.remove('hide');
+  document.getElementById('dash').classList.add('hide');
+}
 async function doActivate(){
   const key = document.getElementById('actKey').value.trim();
   if(!/^[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/.test(key)){
