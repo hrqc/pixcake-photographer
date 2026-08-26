@@ -47,7 +47,8 @@ class Remote:
         return ''
 
     # ---- 基础请求 ----
-    def _request(self, method, path, payload=None):
+    def _request_raw(self, method, path, payload=None):
+        """发请求, 返回 (status, body_bytes). 不解析 JSON, 供图片等二进制用."""
         headers = {'User-Agent': 'PixCake-Photographer/1.0',
                    'Content-Type': 'application/json'}
         cookie = self._cookie_header()
@@ -58,18 +59,22 @@ class Remote:
                                      headers=headers, method=method)
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                raw = resp.read()
                 self._store_cookies(resp.headers)
+                return resp.status, resp.read()
         except urllib.error.HTTPError as exc:
-            raw = exc.read()
             self._store_cookies(exc.headers)
+            return exc.code, exc.read()
+        except urllib.error.URLError as exc:
+            raise RemoteError(0, '无法连接服务器: %s' % (exc.reason or exc))
+
+    def _request(self, method, path, payload=None):
+        status, raw = self._request_raw(method, path, payload)
+        if status >= 400:
             try:
                 j = json.loads(raw.decode('utf-8'))
             except Exception:
-                raise RemoteError(exc.code, '服务器错误 (HTTP %d)' % exc.code)
-            raise RemoteError(exc.code, j.get('error') or '服务器错误')
-        except urllib.error.URLError as exc:
-            raise RemoteError(0, '无法连接服务器: %s' % (exc.reason or exc))
+                raise RemoteError(status, '服务器错误 (HTTP %d)' % status)
+            raise RemoteError(status, j.get('error') or '服务器错误')
         try:
             return json.loads(raw.decode('utf-8'))
         except Exception:
@@ -80,6 +85,17 @@ class Remote:
 
     def get(self, path):
         return self._request('GET', path)
+
+    def get_bytes(self, path):
+        """GET 返回原始响应字节 (图片代理). 4xx/5xx 抛 RemoteError."""
+        status, raw = self._request_raw('GET', path)
+        if status >= 400:
+            try:
+                j = json.loads(raw.decode('utf-8'))
+            except Exception:
+                raise RemoteError(status, '服务器错误 (HTTP %d)' % status)
+            raise RemoteError(status, j.get('error') or '服务器错误')
+        return raw
 
     # ---- 业务接口 ----
     def activate(self, key):
@@ -100,8 +116,13 @@ class Remote:
             'machine': machine_fp(),
         })
 
-    def tenant_scan(self):
-        return self.post('/api/tenant/scan', {})
+    def tenant_scan(self, project_names=None):
+        """触发服务器扫描租户工作区. project_names: {pid: 相册显示名},
+        服务器入库时采用 (覆盖默认 album_id)."""
+        payload = {}
+        if project_names:
+            payload['project_names'] = project_names
+        return self.post('/api/tenant/scan', payload)
 
     def tenant_prewarm(self):
         return self.get('/api/tenant/prewarm')

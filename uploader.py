@@ -126,11 +126,15 @@ class Uploader:
                 self._finish('error', '已暂停')
                 return
             self._log('上传完成: 成功 %d, 跳过 %d, 失败 %d' % (done_files, skipped, failed))
-            # 触发服务器扫描建站
+            # 触发服务器扫描建站 (带上相册显示名 = 创建时间)
             with self._lock:
                 self._state['phase'] = 'scan'
             try:
-                server.tenant_scan()
+                names = {}
+                for a in scanner.find_albums(config.get('workspace') or ''):
+                    if a.get('name'):
+                        names[a['id']] = a['name']
+                server.tenant_scan(names if names else None)
             except remote.RemoteError as exc:
                 self._log('扫描失败: %s' % exc.message)
                 self._finish('error', '扫描失败: %s' % exc.message)

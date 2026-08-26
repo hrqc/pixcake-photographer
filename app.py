@@ -375,6 +375,12 @@ class Handler(BaseHTTPRequestHandler):
             if path == '/api/me':
                 self._me_get()
                 return
+            if path.startswith('/img/'):
+                self._img_proxy(self.path)
+                return
+            if path.startswith('/api/tenant/project'):
+                self._tenant_api_get(self.path)
+                return
             self._json({'error': 'not found'}, 404)
         except Exception as exc:
             _log('GET %s 异常: %r' % (path, exc))
@@ -400,6 +406,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == '/api/scan':
                 self._scan_post(body)
+                return
+            if path in ('/api/tenant/select', '/api/tenant/rename'):
+                self._tenant_api_post(path, body)
                 return
             self._json({'error': 'not found'}, 404)
         except Exception as exc:
@@ -574,6 +583,42 @@ class Handler(BaseHTTPRequestHandler):
             self._json(_get_remote().tenant_me())
         except remote.RemoteError as exc:
             self._json({'error': exc.message}, exc.status or 400)
+
+    # ---------------- 相册浏览 (代理中央服务器, 自动带 g cookie) ----------------
+    def _tenant_api_get(self, path):
+        """代理服务器租户相册 API (GET). path 为本地原始请求路径 (含 query),
+        与服务器接口路径一一对应, 服务器会校验租户归属 (只能看自己的相册)."""
+        try:
+            err = _ensure_tenant_session()
+            if err:
+                self._json({'error': err}, 401)
+                return
+            self._json(_get_remote().get(path))
+        except remote.RemoteError as exc:
+            self._json({'error': exc.message}, exc.status or 400)
+
+    def _tenant_api_post(self, path, body):
+        try:
+            err = _ensure_tenant_session()
+            if err:
+                self._json({'error': err}, 401)
+                return
+            self._json(_get_remote().post(path, body))
+        except remote.RemoteError as exc:
+            self._json({'error': exc.message}, exc.status or 400)
+
+    def _img_proxy(self, path):
+        """代理 /img/... 图片请求到服务器 (带 g cookie, 服务器校验归属 → 只能看自己相册的图).
+        转发完整 self.path 保留签名 query; 图片始终 JPEG."""
+        try:
+            err = _ensure_tenant_session()
+            if err:
+                self._json({'error': err}, 401)
+                return
+            data = _get_remote().get_bytes(path)
+            self._send(200, data, 'image/jpeg')
+        except remote.RemoteError as exc:
+            self._json({'error': exc.message}, exc.status or 502)
 
 
 class PhotographerServer(ThreadingHTTPServer):

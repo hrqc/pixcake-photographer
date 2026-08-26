@@ -205,6 +205,77 @@
   }
   .gate h1{font-size:18px; letter-spacing:2px; margin-bottom:4px}
   .gate .sub{color:var(--mut); font-size:12.5px; margin-bottom:20px}
+
+  /* ---------- 顶部 Tab ---------- */
+  .navtabs{display:flex; gap:8px; margin-bottom:16px}
+  .navtabs .tab{
+    background:var(--bg2); border:1px solid var(--line2); color:var(--mut);
+    padding:9px 24px; font-weight:700; letter-spacing:1px; cursor:pointer; font-size:13px;
+  }
+  .navtabs .tab.on{background:var(--amber); color:#1a1205; border-color:var(--amber)}
+
+  /* ---------- 选片管理: 相册卡片 ---------- */
+  .galbums{display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px}
+  .galb{background:var(--bg1); border:1px solid var(--line); padding:16px; position:relative; cursor:pointer; transition:border-color .12s}
+  .galb:hover{border-color:var(--amber)}
+  .galb .name{font-size:15px; font-weight:700; word-break:break-all}
+  .galb .meta{color:var(--mut); font-size:12px; font-family:var(--mono); margin:6px 0 4px}
+  .galb .pbar{height:7px; background:var(--bg3); border-radius:4px; overflow:hidden; margin-bottom:10px}
+  .galb .pbar>div{height:100%; background:var(--amber); border-radius:4px}
+  .galb .code{font-family:var(--mono); font-size:12px; color:var(--amber2); background:var(--bg2);
+    border:1px solid var(--line); padding:5px 8px; display:inline-block; margin-bottom:10px}
+  .galb .row{display:flex; gap:8px; flex-wrap:wrap}
+  .galb .row .btn{padding:5px 12px; font-size:12px; clip-path:none}
+
+  /* ---------- 相册视图 (全屏, 管理端同款) ---------- */
+  .albumview{position:fixed; inset:0; background:var(--bg0); z-index:40; display:none; overflow-y:auto}
+  .albumview.on{display:block}
+  .av-wrap{max-width:1280px; margin:0 auto; padding:18px 22px 80px}
+  .av-wrap header{display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap}
+  .av-wrap header h1{cursor:pointer; font-size:17px; letter-spacing:1px; word-break:break-all}
+  .av-wrap header h1:hover{color:var(--amber)}
+  .av-wrap .sub{color:var(--mut); font-family:var(--mono); font-size:12px}
+  .spacer{flex:1}
+  .toolbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px}
+  .count{padding:6px 12px; background:var(--bg2); border:1px solid var(--line);
+    border-radius:20px; font-size:12.5px; color:var(--mut)}
+  .count b{color:var(--amber2)}
+  .filter .btn.on{background:var(--amber); color:#1a1205; border-color:var(--amber)}
+  .grid{display:flex; flex-wrap:wrap; gap:10px}
+  .card{position:relative; flex:0 0 150px; background:var(--bg2); border:2px solid var(--line);
+    border-radius:8px; overflow:hidden; cursor:pointer; transition:border-color .1s}
+  .card img{display:block; width:100%; height:auto; background:var(--bg0)}
+  .card:hover{border-color:var(--line2)}
+  .card.sel{border-color:var(--amber); box-shadow:0 0 0 2px rgba(255,182,72,.35)}
+  .card .idx{position:absolute; top:6px; left:6px; background:rgba(0,0,0,.62); color:#fff;
+    font-size:11px; padding:2px 7px; border-radius:10px; z-index:2}
+  .card.sel .idx{background:var(--amber); color:#1a1205; font-weight:700}
+  .card .chk{position:absolute; top:5px; right:5px; width:22px; height:22px; border-radius:50%;
+    background:rgba(0,0,0,.55); border:2px solid rgba(255,255,255,.5); color:transparent;
+    display:flex; align-items:center; justify-content:center; font-size:13px; z-index:2}
+  .card.sel .chk{background:var(--amber); border-color:var(--amber); color:#1a1205}
+  .card .cap{position:absolute; left:0; right:0; bottom:0; background:linear-gradient(transparent,rgba(0,0,0,.75));
+    color:#fff; font-size:11px; padding:14px 7px 5px; z-index:2}
+  .hint{color:var(--mut); margin-top:40px; text-align:center; font-size:14px}
+
+  /* ---------- 灯箱 (管理端同款) ---------- */
+  #lb{position:fixed; inset:0; background:rgba(6,8,12,.94); z-index:60; display:none;
+    flex-direction:column; align-items:center; justify-content:center}
+  #lb.show{display:flex}
+  #lb img{max-width:92vw; max-height:84vh; object-fit:contain; border-radius:6px; box-shadow:0 8px 40px rgba(0,0,0,.6)}
+  #lb .bar{position:absolute; top:0; left:0; right:0; padding:12px 18px; display:flex;
+    align-items:center; gap:12px; color:#fff; background:linear-gradient(rgba(0,0,0,.6),transparent)}
+  #lb .bar .t{font-size:14px}
+  #lb .nav{position:absolute; top:50%; transform:translateY(-50%); font-size:34px; color:#fff;
+    background:rgba(255,255,255,.08); border:none; border-radius:50%; width:52px; height:52px;
+    cursor:pointer; display:flex; align-items:center; justify-content:center}
+  #lb .nav:hover{background:rgba(255,255,255,.2)}
+  #lb .nav.prev{left:14px} #lb .nav.next{right:14px}
+  #lb .key{position:absolute; bottom:18px; left:50%; transform:translateX(-50%);
+    color:var(--dim); font-size:12px; text-align:center}
+  .lbx{font-size:16px; padding:8px 16px; border-radius:8px; background:rgba(255,255,255,.1);
+    border:1px solid rgba(255,255,255,.25); color:#fff; cursor:pointer}
+  .lbx.sel{background:var(--amber); color:#1a1205; border-color:var(--amber)}
 </style>
 </head>
 <body>
@@ -241,6 +312,10 @@
 
   <!-- 主界面 -->
   <div id="dash" class="hide">
+    <div class="navtabs">
+      <button class="tab on" id="tabUpload" onclick="switchTab('upload')">上传管理</button>
+      <button class="tab" id="tabGallery" onclick="switchTab('gallery')">选片管理</button>
+    </div>
     <div id="errBanner" class="warnbar error hide"><span>⚠</span><span id="errBannerTxt">界面错误</span></div>
     <div id="warnHost" class="warnbar hide">
       <span>⚠</span><span id="warnHostTxt">无法连接服务器</span>
@@ -252,7 +327,7 @@
       <button class="btn sm ghost" style="margin-left:auto; white-space:nowrap" onclick="showGate()">更换卡密</button>
     </div>
 
-    <div class="grid">
+    <div id="viewUpload"><div class="grid">
       <!-- 左列: 操作 -->
       <div>
         <!-- 工作区 -->
@@ -350,6 +425,61 @@
         </div>
       </div>
     </div>
+    </div><!-- /grid /viewUpload -->
+
+    <!-- 选片管理视图 -->
+    <div id="viewGallery" class="hide">
+      <div class="panel">
+        <div class="panel-head">
+          <span class="tag">GAL</span><h2>我的相册</h2>
+          <span class="right">
+            <button class="btn ghost sm" onclick="gLoadProjects()">刷新</button>
+            <span id="gErr" style="color:var(--red); font-size:11px; margin-left:8px"></span>
+          </span>
+        </div>
+        <div class="panel-body">
+          <div class="hint" style="margin-top:0; margin-bottom:12px">点击相册卡片查看照片 · 单击选中/取消 · 双击看大图 · 点顶部相册名可改名</div>
+          <div class="galbums" id="gAlbums"><span class="muted">加载中…</span></div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /dash -->
+
+  <!-- 相册视图 (全屏, 管理端同款) -->
+  <div id="g-album" class="albumview">
+    <div class="av-wrap">
+      <header>
+        <button class="btn" onclick="gGoBack()">← 返回</button>
+        <h1 id="gAlbName" title="点击改名" onclick="gRenameProject()">…</h1>
+        <span class="sub" id="gAlbSub"></span>
+        <span class="spacer"></span>
+        <button class="btn" onclick="gRefreshProject()">刷新</button>
+      </header>
+      <div class="toolbar">
+        <span class="count">共 <b id="gCTotal">0</b> 张 · 已选 <b id="gCSel">0</b> 张</span>
+        <span class="filter">
+          <button class="btn on" id="gFAll" onclick="gSetFilter(false)">全部</button>
+          <button class="btn" id="gFSel" onclick="gSetFilter(true)">只看已选</button>
+        </span>
+        <span class="muted">单击选中/取消 · 双击看大图</span>
+      </div>
+      <div class="grid" id="gGrid"></div>
+      <div class="hint" id="gEmpty" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- 灯箱 -->
+  <div id="lb">
+    <div class="bar">
+      <span class="t" id="lbTitle"></span>
+      <span class="spacer"></span>
+      <button class="lbx" id="lbSel" onclick="gLbToggleSel()">选 中</button>
+      <button class="lbx" onclick="gCloseLB()">✕</button>
+    </div>
+    <button class="nav prev" onclick="gLbNav(-1)">‹</button>
+    <img id="lbImg" alt="">
+    <button class="nav next" onclick="gLbNav(1)">›</button>
+    <div class="key">← → 切换 · S 选中 · Esc 关闭</div>
   </div>
 
   <div class="footer">PIXCAKE-PHOTOGRAPHER v1.0 · 数据目录 ~/.pixcake-photographer</div>
@@ -694,6 +824,159 @@ async function refreshMe(){
   document.getElementById('warnHost').classList.add('hide');
   if(r.j.tenant) renderCard(r.j.card, r.j.tenant);
 }
+
+/* ============ 选片管理 (相册视图, 管理端同款) ============ */
+const G = { projects:[], pid:null, project:null, photos:[], selOnly:false, lb:0, lbShown:false };
+const gQ = id => document.getElementById(id);
+
+function switchTab(name){
+  const up = (name==='upload'), gal = (name==='gallery');
+  gQ('tabUpload').classList.toggle('on', up);
+  gQ('tabGallery').classList.toggle('on', gal);
+  gQ('viewUpload').classList.toggle('hide', !up);
+  gQ('viewGallery').classList.toggle('hide', !gal);
+  if(gal) gLoadProjects();   // 进入选片管理再加载, 避免未激活时报错
+}
+
+async function gapi(path, opts){
+  const r = await api(path, opts);
+  if(!r.ok) throw new Error(r.j.error || ('HTTP '+r.status));
+  return r.j;
+}
+function gEsc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function gLoadProjects(){
+  const box = gQ('gAlbums'), err = gQ('gErr');
+  err.textContent='';
+  box.innerHTML = '<span class="muted">加载中…</span>';
+  try{
+    const j = await gapi(API+'/tenant/projects');
+    G.projects = j.projects || [];
+    if(!G.projects.length){
+      box.innerHTML = '<span class="muted">还没有相册。请先在「上传管理」上传精修相册，再刷新。</span>';
+      return;
+    }
+    box.innerHTML = G.projects.map(p => {
+      const has = (p.photo_count||0) > 0;
+      const pct = has ? Math.round((p.sel_count||0)*100/p.photo_count) : 0;
+      const nm = p.name || p.album_id || p.id;
+      return '<div class="galb" onclick="gOpenProject(\''+gEsc(p.id)+'\')">'+
+        '<div class="name">'+gEsc(nm)+'</div>'+
+        '<div class="meta">'+(p.photo_count||0)+' 张 · 已选 '+(p.sel_count||0)+'</div>'+
+        '<div class="pbar"><div style="width:'+pct+'%"></div></div>'+
+        '<div class="code">'+gEsc(p.code||'未开通')+'</div>'+
+        '<div class="row">'+
+        '<button class="btn" onclick="event.stopPropagation();gRenameAlbum(\''+gEsc(p.id)+'\',\''+gEsc(nm)+'\')">改名</button>'+
+        '<button class="btn" onclick="event.stopPropagation();gOpenProject(\''+gEsc(p.id)+'\')">查看照片</button>'+
+        '</div></div>';
+    }).join('');
+  }catch(e){
+    box.innerHTML = '<span class="muted">加载失败</span>';
+    err.textContent = e.message;
+  }
+}
+
+async function gOpenProject(pid){
+  G.pid = pid;
+  gQ('g-album').classList.add('on');
+  await gRefreshProject();
+}
+async function gRefreshProject(){
+  try{
+    const j = await gapi(API+'/tenant/project?p='+encodeURIComponent(G.pid));
+    G.project = j.project; G.photos = j.photos || [];
+    gQ('gAlbName').textContent = (j.project && (j.project.name||j.project.album_id)) || G.pid;
+    gQ('gAlbSub').textContent = (j.project && j.project.album_id) || '';
+    gRenderGallery();
+  }catch(e){
+    alert('加载相册失败: '+e.message);
+    gGoBack();
+  }
+}
+function gGoBack(){
+  gQ('g-album').classList.remove('on');
+  G.photos = [];
+  if(G.lbShown) gCloseLB();
+  gLoadProjects();   // 刷新列表 (已选数可能变了)
+}
+function gSetFilter(v){
+  G.selOnly = v;
+  gQ('gFAll').classList.toggle('on', !v);
+  gQ('gFSel').classList.toggle('on', v);
+  gRenderGallery();
+}
+let gClickTimer = null;
+function gRenderGallery(){
+  const shown = G.selOnly ? G.photos.filter(p=>p.selected) : G.photos;
+  gQ('gCTotal').textContent = G.photos.length;
+  gQ('gCSel').textContent = G.photos.filter(p=>p.selected).length;
+  const grid = gQ('gGrid');
+  grid.innerHTML='';
+  gQ('gEmpty').style.display = shown.length?'none':'block';
+  gQ('gEmpty').textContent = G.selOnly ? '还没有选中的照片。' : '该相册还没有精修照片。';
+  G.photos.forEach((ph,idx)=>{
+    if(G.selOnly && !ph.selected) return;
+    const d = document.createElement('div');
+    d.className = 'card'+(ph.selected?' sel':'');
+    d.innerHTML = '<span class="idx">'+(idx+1)+'</span><span class="chk">✓</span>'+
+      '<img loading="lazy" src="'+ph.thumb_url+'" alt="'+gEsc(ph.photo_id)+'">'+
+      '<span class="cap">'+gEsc(ph.photo_id)+'</span>';
+    d.onclick = (ev)=>{
+      if(ev.detail===2) return;   // 双击让给 dblclick
+      if(gClickTimer) clearTimeout(gClickTimer);
+      gClickTimer = setTimeout(()=>gToggleSelect(ph), 220);
+    };
+    d.ondblclick = ()=>{ if(gClickTimer) clearTimeout(gClickTimer); gClickTimer=null; gOpenLB(idx); };
+    grid.appendChild(d);
+  });
+}
+async function gToggleSelect(ph){
+  ph.selected = !ph.selected;
+  try{ await gapi(API+'/tenant/select', {method:'POST', body:{keys:[ph.key], selected:ph.selected}}); }
+  catch(e){ ph.selected = !ph.selected; alert('同步失败: '+e.message); }
+  gRenderGallery();
+  if(G.lbShown) gUpdateLB();
+}
+function gRenameProject(){   // 相册视图顶部点相册名改名
+  const cur = G.project && (G.project.name||G.project.album_id) || '';
+  const name = prompt('项目名称', cur);
+  if(!name || name===cur) return;
+  gapi(API+'/tenant/rename', {method:'POST', body:{p:G.pid, name:name}})
+    .then(()=>{ gQ('gAlbName').textContent=name; if(G.project) G.project.name=name; })
+    .catch(()=>{});
+}
+function gRenameAlbum(pid, curName){   // 相册列表卡片直接改名
+  const name = prompt('项目名称', curName);
+  if(!name || name===curName) return;
+  gapi(API+'/tenant/rename', {method:'POST', body:{p:pid, name:name}})
+    .then(()=>{
+      const pj = G.projects.find(x=>x.id===pid);
+      if(pj) pj.name = name;
+      gLoadProjects();
+    })
+    .catch(()=>{});
+}
+// 灯箱
+function gOpenLB(idx){ G.lb=idx; G.lbShown=true; gQ('lb').classList.add('show'); gUpdateLB(); }
+function gCloseLB(){ G.lbShown=false; gQ('lb').classList.remove('show'); gQ('lbImg').src=''; }
+function gLbNav(d){ if(!G.photos.length) return; G.lb=(G.lb+d+G.photos.length)%G.photos.length; gUpdateLB(); }
+function gUpdateLB(){
+  const ph = G.photos[G.lb];
+  gQ('lbImg').src = ph.full_url;
+  gQ('lbTitle').textContent = (G.lb+1)+' / '+G.photos.length+' · '+ph.photo_id;
+  const b = gQ('lbSel');
+  b.textContent = ph.selected?'取消选中':'选 中';
+  b.classList.toggle('sel', ph.selected);
+}
+function gLbToggleSel(){ gToggleSelect(G.photos[G.lb]); }
+document.addEventListener('keydown', e=>{
+  if(!G.lbShown) return;
+  if(e.key==='Escape') gCloseLB();
+  else if(e.key==='ArrowLeft') gLbNav(-1);
+  else if(e.key==='ArrowRight') gLbNav(1);
+  else if(e.key==='s'||e.key==='S') gLbToggleSel();
+});
+gQ('lb').addEventListener('click', e=>{ if(e.target.id==='lb') gCloseLB(); });
 
 /* ============ 启动 ============ */
 loadStatus().then(()=>{
