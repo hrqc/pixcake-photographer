@@ -10,6 +10,15 @@ import json
 _thumb_num_re = re.compile(r'thumbnail_(\d+)_')
 # 像素蛋糕文件命名: <文件名>_<长边像素> (相机 3000/手机 2000~4000/微信 1584 等)
 _dim_re = re.compile(r'_(\d+)$')
+# 与服务器 upload/scan 的 rel_path 白名单一致: 仅字母数字/中文/._-/空格.
+# 像素蛋糕文件名可能含 ( ) + # 等 → 服务器会整批拒绝, 这里预校验过滤.
+_REL_PATH_RE = re.compile(r'^[\w\-一-鿿\./\s]+$')
+
+
+def rel_path_ok(rel):
+    """rel_path 是否可被服务器接受 (非法字符/路径穿越/绝对路径 → False)."""
+    return bool(rel) and not rel.startswith('/') and '..' not in rel \
+        and ':' not in rel and bool(_REL_PATH_RE.match(rel))
 
 
 def _thumb_sort_key(td):

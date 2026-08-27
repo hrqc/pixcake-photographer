@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>像素蛋糕 · 摄影师端 CONSOLE</title>
+<title>贺染导出选片 · 摄影师端 CONSOLE</title>
 <style>
   :root{
     --bg0:#121316; --bg1:#1a1c21; --bg2:#22252b; --bg3:#2a2e35;
@@ -285,7 +285,7 @@
   <div class="console-bar">
     <div class="brand">
       <div class="logo"><span>▲</span></div>
-      <h1>PIXCAKE · 摄影师端<small>PHOTOGRAPHER UPLINK CONSOLE</small></h1>
+      <h1>hrqc · 摄影师端<small>PHOTOGRAPHER UPLINK CONSOLE</small></h1>
     </div>
     <div class="machine">
       <div><span class="led gray" id="topLed"></span>授权状态 <b id="topState">—</b></div>
@@ -333,7 +333,7 @@
         <!-- 工作区 -->
         <div class="panel">
           <div class="panel-head">
-            <span class="tag">WS</span><h2>像素蛋糕工作区</h2>
+            <span class="tag">WS</span><h2>工作区</h2>
             <span class="right" id="wsPathShort">—</span>
           </div>
           <div class="panel-body">
@@ -345,13 +345,13 @@
               <button class="btn ghost sm" onclick="probe()">重新探测</button>
             </div>
             <div class="pathline" id="wsPath"><span class="dot">◆</span> 未设置</div>
-            <label class="formlabel">或点“浏览”选择像素蛋糕工作区</label>
+            <label class="formlabel">或点“浏览”选择工作区</label>
             <div class="keyrow">
               <input id="wsManual" placeholder="点击“浏览”选文件夹，或粘贴工作区路径" style="font-size:12px; letter-spacing:0">
               <button class="btn ghost sm" onclick="browseWs()">浏览…</button>
               <button class="btn ghost sm" onclick="setWs(document.getElementById('wsManual').value.trim())">设置</button>
             </div>
-            <div class="hint">工作区 = 像素蛋糕“工作区位置”里的 <b>project</b> 子目录（含相册）；填了上级目录会自动向下定位</div>
+            <div class="hint">工作区 = 精修软件“工作区位置”里的 <b>project</b> 子目录（含相册）；填了上级目录会自动向下定位</div>
             <div class="err" id="wsErr"></div>
           </div>
         </div>
@@ -482,7 +482,7 @@
     <div class="key">← → 切换 · S 选中 · Esc 关闭</div>
   </div>
 
-  <div class="footer">PIXCAKE-PHOTOGRAPHER v1.0 · 数据目录 ~/.pixcake-photographer</div>
+  <div class="footer">HRQC-PHOTOGRAPHER v1.0 · 数据目录 ~/.pixcake-photographer</div>
 </div>
 
 <script>
@@ -699,11 +699,17 @@ async function setWs(path){
   else if(r.j.workspace){ errEl.className='err ok'; errEl.textContent = '工作区已保存: '+r.j.workspace; }
   if(r.j.workspace && albums.length===0){
     errEl.className='err';
-    errEl.textContent='工作区已保存，但目录下没找到相册（缺少 thumbnail_cache）。若填的是像素蛋糕的上级目录，会自动向下定位；仍不行请点“浏览”选 project 目录。';
+    errEl.textContent='工作区已保存，但目录下没找到相册（缺少 thumbnail_cache）。若填的是精修软件的上级目录，会自动向下定位；仍不行请点“浏览”选 project 目录。';
   }
 }
 
 /* ============ 相册 ============ */
+function fmtDT(ts){
+  if(!ts) return '—';
+  const d = new Date(ts * 1000);
+  const p = n => String(n).padStart(2, '0');
+  return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
 async function loadAlbums(){
   const r = await api(API+'/albums');
   const body = document.getElementById('albumBody');
@@ -718,9 +724,10 @@ async function loadAlbums(){
   for(const a of albums){
     const state = a.complete ? 'ok' : (a.uploaded_bytes>0 ? 'pend' : 'no');
     const stateTxt = a.complete ? '已传' : (a.uploaded_bytes>0 ? (Math.round(a.uploaded_bytes*100/a.total_bytes))+'%' : '未传');
+    const label = fmtDT(a.created_at);   // 相册创建时间 (MM-DD HH:mm), 便于识别「今天新建」的相册
     html += '<tr data-path="'+a.path.replace(/\\/g,'\\\\')+'">'+
       '<td><input type="checkbox" class="alchk" data-path="'+a.path+'" '+(a.complete?'':'')+'></td>'+
-      '<td><div class="name">'+a.album_id+'</div><div class="path">'+a.user+'</div></td>'+
+      '<td><div class="name">'+label+'</div><div class="path">'+a.album_id+' · '+a.user+'</div></td>'+
       '<td class="num">'+a.photo_count+'</td>'+
       '<td><span class="badge '+state+'">'+stateTxt+'</span></td>'+
       '<td class="num">'+fmtSize(a.total_bytes)+'</td></tr>';
@@ -860,9 +867,10 @@ async function gLoadProjects(){
       const has = (p.photo_count||0) > 0;
       const pct = has ? Math.round((p.sel_count||0)*100/p.photo_count) : 0;
       const nm = p.name || p.album_id || p.id;
+      const created = p.created_at ? (' · 上传 ' + fmtDT(p.created_at)) : '';
       return '<div class="galb" onclick="gOpenProject(\''+gEsc(p.id)+'\')">'+
         '<div class="name">'+gEsc(nm)+'</div>'+
-        '<div class="meta">'+(p.photo_count||0)+' 张 · 已选 '+(p.sel_count||0)+'</div>'+
+        '<div class="meta">'+(p.photo_count||0)+' 张 · 已选 '+(p.sel_count||0)+created+'</div>'+
         '<div class="pbar"><div style="width:'+pct+'%"></div></div>'+
         '<div class="code">'+gEsc(p.code||'未开通')+'</div>'+
         '<div class="row">'+

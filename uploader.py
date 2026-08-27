@@ -19,12 +19,34 @@ def _state_path():
     return os.path.join(config.data_dir(), 'upload_state.json')
 
 
+def _tenant_key():
+    """租户隔离键: 上传进度按摄影师站点分开, 换卡/换租户不沿用旧进度
+    (旧租户已传的文件在另一站点不存在, 误判已传会丢文件)."""
+    lic = config.get('license')
+    if lic and isinstance(lic, dict):
+        t = (lic.get('tenant') or '').strip()
+        if t:
+            return t
+    return 'default'
+
+
 def _load_state():
+    """返回 {tenant: {rel: {...}}}. 兼容旧扁平格式 {rel: {...}} (归入 'default')."""
     try:
         with open(_state_path(), encoding='utf-8') as f:
-            return json.load(f)
+            raw = json.load(f)
     except Exception:
         return {}
+    if not isinstance(raw, dict):
+        return {}
+    for v in raw.values():
+        if isinstance(v, dict) and 'size' in v:   # 旧扁平格式: key 是 rel_path
+            return {'default': raw}
+    return raw
+
+
+def _files(state):
+    return state.setdefault(_tenant_key(), {})
 
 
 def _save_state(state):
@@ -86,12 +108,18 @@ class Uploader:
         try:
             state = _load_state()
             total_files = total_bytes = 0
+            bad_rel = 0
             plan = []
             for ap in album_paths:
                 for f in scanner.album_upload_files(ap):
+                    if not scanner.rel_path_ok(f['rel_path']):
+                        bad_rel += 1   # H4: 服务器不接受含 ( ) + # 等字符的路径, 预校验过滤
+                        continue
                     plan.append(f)
                     total_files += 1
                     total_bytes += f['size']
+            if bad_rel:
+                self._log('跳过 %d 个非法路径文件 (文件名含特殊字符, 服务器不接受)' % bad_rel)
             with self._lock:
                 self._state['total_files'] = total_files
                 self._state['total_bytes'] = total_bytes
@@ -102,8 +130,8 @@ class Uploader:
                 if self._stop.is_set():
                     break
                 rel = f['rel_path']
-                # 已完整上传且未变更 -> 跳过
-                prev = state.get(rel)
+                # 已完整上传且未变更 -> 跳过 (state 按租户隔离)
+                prev = _files(state).get(rel)
                 if prev and prev.get('size') == f['size'] and prev.get('mtime') == f['mtime'] \
                         and prev.get('uploaded') == f['size']:
                     skipped += 1
@@ -149,12 +177,23 @@ class Uploader:
     def _upload_file(self, server, f, prev):
         rel = f['rel_path']
         size = f['size']
+        # H5: 源文件在上传前被编辑 (变小/改动) → 重 stat, 变了就丢弃旧进度全量重传
+        try:
+            st = os.stat(f['abs_path'])
+            if st.st_size != size or int(st.st_mtime_ns) != f['mtime']:
+                size = st.st_size
+                f['size'] = size
+                f['mtime'] = int(st.st_mtime_ns)
+                prev = None
+                self._log('文件已变更, 全量重传 %s' % rel)
+        except OSError as exc:
+            return False, '读取文件失败: %s' % exc
         start = 0
         if prev and prev.get('size') == size and prev.get('mtime') == f['mtime'] \
                 and isinstance(prev.get('uploaded'), int):
             start = prev['uploaded']
         state = _load_state()
-        cur = dict(state.get(rel) or {})
+        cur = dict(_files(state).get(rel) or {})
         cur['size'] = size
         cur['mtime'] = f['mtime']
         for attempt in range(RETRY):
@@ -171,12 +210,23 @@ class Uploader:
                         start += len(raw)
                         cur['uploaded'] = start
                         all_st = _load_state()
-                        all_st[rel] = cur
+                        _files(all_st)[rel] = cur
                         _save_state(all_st)
-                        with self._lock:
-                            self._state['done_bytes'] += 0  # 进度在 _run 汇总
                 return True, ''
             except remote.RemoteError as exc:
+                # S2: 服务器权威 offset. 本地进度过期/换租户残留 → 以服务器实际 size
+                # 续传; 服务器已完整 (>= 本地) → 视为上传完成, 不再传.
+                if exc.status == 409 and isinstance(exc.data, dict) and 'size' in exc.data:
+                    ssize = exc.data['size']
+                    if ssize >= size:
+                        cur['uploaded'] = size
+                        all_st = _load_state()
+                        _files(all_st)[rel] = cur
+                        _save_state(all_st)
+                        return True, ''
+                    start = ssize
+                    cur['uploaded'] = ssize
+                    continue
                 if attempt == RETRY - 1:
                     return False, exc.message
                 time.sleep(1)

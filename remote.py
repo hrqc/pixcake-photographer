@@ -9,10 +9,11 @@ from machine import machine_fp
 
 
 class RemoteError(Exception):
-    def __init__(self, status, message):
+    def __init__(self, status, message, data=None):
         super().__init__(message)
         self.status = status
         self.message = message
+        self.data = data   # 服务器错误响应完整 JSON (409 续传对齐时取 size)
 
 
 class Remote:
@@ -49,7 +50,7 @@ class Remote:
     # ---- 基础请求 ----
     def _request_raw(self, method, path, payload=None):
         """发请求, 返回 (status, body_bytes). 不解析 JSON, 供图片等二进制用."""
-        headers = {'User-Agent': 'PixCake-Photographer/1.0',
+        headers = {'User-Agent': 'hrqc-photographer/1.0',
                    'Content-Type': 'application/json'}
         cookie = self._cookie_header()
         if cookie:
@@ -74,7 +75,7 @@ class Remote:
                 j = json.loads(raw.decode('utf-8'))
             except Exception:
                 raise RemoteError(status, '服务器错误 (HTTP %d)' % status)
-            raise RemoteError(status, j.get('error') or '服务器错误')
+            raise RemoteError(status, j.get('error') or '服务器错误', data=j)
         try:
             return json.loads(raw.decode('utf-8'))
         except Exception:
@@ -94,7 +95,7 @@ class Remote:
                 j = json.loads(raw.decode('utf-8'))
             except Exception:
                 raise RemoteError(status, '服务器错误 (HTTP %d)' % status)
-            raise RemoteError(status, j.get('error') or '服务器错误')
+            raise RemoteError(status, j.get('error') or '服务器错误', data=j)
         return raw
 
     # ---- 业务接口 ----

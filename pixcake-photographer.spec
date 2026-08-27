@@ -2,16 +2,22 @@
 """摄影师端客户端打包 spec (PyInstaller, Win/Mac 通用).
 用法: pyinstaller pixcake-photographer.spec  (或 pyinstaller -y pixcake-photographer.spec)
 """
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_all
 
 block_cipher = None
+
+# pywebview (内嵌浏览器窗口): 收集其资源与平台后端, 打包后 WebView 才能工作
+_webview_datas, _webview_binaries, _webview_hidden = collect_all('webview')
 
 a = Analysis(
     ['run.py'],
     pathex=[],
-    binaries=[],
-    datas=[('static', 'static')],
-    hiddenimports=[],
+    binaries=_webview_binaries,
+    datas=[('static', 'static')] + _webview_datas,
+    hiddenimports=(_webview_hidden
+                   + ['webview.platforms.winforms',
+                      'webview.platforms.edgechromium',
+                      'webview.platforms.mshtml']),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

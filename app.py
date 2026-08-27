@@ -76,10 +76,23 @@ def _is_album_root(d):
     return False
 
 
+def _is_workspace_root(d):
+    """d 是否为可用的工作区根 (即使暂无相册):
+    - 已是相册根 (含 thumbnail_cache) → True
+    - 标准工作区: 目录名 project 且父目录名含 '.PixCake-qt_pro Workspace'
+      (像素蛋糕默认工作区结构; 相册尚未创建/已清空时也能自动定位,
+      修复: 选安装文件夹深搜无法下钻到空工作区的问题)"""
+    if _is_album_root(d):
+        return True
+    name = os.path.basename(d).lower()
+    parent = os.path.basename(os.path.dirname(d)).lower()
+    return name == 'project' and 'pixcake-qt_pro workspace' in parent
+
+
 def _find_workspace_deep(p, depth=5):
-    """在 p 内部有界递归寻找相册根 (用户手填/浏览时用, 允许进入 Program Files 等).
+    """在 p 内部有界递归寻找工作区根 (用户手填/浏览时用, 允许进入 Program Files 等).
     命中即返回, 找不到返回 None."""
-    if _is_album_root(p):
+    if _is_workspace_root(p):
         return p
     if depth <= 0:
         return None
@@ -115,11 +128,17 @@ def _resolve_workspace(ws):
     return ws
 
 
+_SEARCH_BUDGET = {'listdirs': 0}
+_MAX_LISTDIR = 30000   # 全局 listdir 预算: 无像素蛋糕的盘只扫前 N 个目录, 防启动卡顿
+
+
 def _search(d, depth, max_depth, _add):
-    """有界深度搜索工作区; 命中标记名目录才下钻检查, 避免全盘 listdir."""
-    if depth >= max_depth:
+    """有界深度搜索工作区; 命中标记名目录才下钻检查, 避免全盘 listdir.
+    带全局 listdir 预算: 目录极多的盘超预算即停, 常见候选路径已单独覆盖."""
+    if depth >= max_depth or _SEARCH_BUDGET['listdirs'] > _MAX_LISTDIR:
         return
     for name in _listdir_safe(d):
+        _SEARCH_BUDGET['listdirs'] += 1
         if name.lower() in _SKIP_DIRS:
             continue
         p = os.path.join(d, name)
@@ -146,13 +165,14 @@ def _discover_workspaces():
             seen.add(p)
 
     for p in WS_CANDIDATES:
-        if os.path.isdir(p) and _is_album_root(p):
+        if os.path.isdir(p) and _is_workspace_root(p):
             _add(p)
     roots = [os.path.expanduser('~')]
     for letter in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
         root = '%s:/' % letter
         if os.path.isdir(root):
             roots.append(root)
+    _SEARCH_BUDGET['listdirs'] = 0
     for root in roots:
         _search(root, 0, 4, _add)
     return found
@@ -241,13 +261,29 @@ def _verify_loop():
 
 
 def probe_workspace():
-    """返回探测到的工作区(相册根)候选 + 当前配置的工作区."""
+    """返回探测到的工作区(相册根)候选 + 当前配置的工作区.
+
+    自动恢复: 本机 config.workspace 为空或目录已失效时,
+    ① 按机器码读回曾保存的工作区 (machine_workspace.json) → 直接恢复;
+    ② 仍无 → 用探测到的第一个候选补位 (自愈), 免去每次打开重选."""
     try:
         cands = _discover_workspaces()
     except Exception as exc:
         _log('probe_workspace 异常: %r' % (exc,))
         cands = []
     cur = (config.get('workspace') or '').strip()
+    # ① 机器码记忆恢复: config 为空或目录没了, 但本机曾保存过 → 自动恢复
+    if not cur or not os.path.isdir(cur):
+        rec = config.load_machine_workspace(machine_fp()).strip()
+        if rec and os.path.isdir(rec) and rec != cur:
+            cur = rec
+            config.set_many(workspace=rec)
+            _log('按机器码恢复工作区: %s' % rec)
+    # ② 自愈: 保存的目录仍不存在 → 用候选补位 (盘符/相册位置变了也能自动跟上)
+    if cur and not os.path.isdir(cur) and cands:
+        config.set_many(workspace=cands[0])
+        _log('工作区目录失效, 自动切换到候选: %s' % cands[0])
+        cur = cands[0]
     out = {'candidates': cands, 'current': cur, 'default': scanner_default()}
     _log('探测工作区: candidates=%d current=%r' % (len(cands), cur))
     return out
@@ -313,7 +349,13 @@ def build_status():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = 'PixCakePhotographer/1.0'
+    server_version = 'hrqc-photographer/1.0'
+
+    def _host_ok(self):
+        """DNS rebinding 防护: 本地服务绑定 127.0.0.1, 但恶意网页可经浏览器同源
+        访问本机端口且 Host 为攻击者域名 → 一律拒绝非本机 Host."""
+        host = (self.headers.get('Host') or '').split(':', 1)[0].strip().lower()
+        return host in ('127.0.0.1', 'localhost', '::1')
 
     def _send(self, code, body=b'', ctype='application/json', headers=None):
         self.send_response(code)
@@ -355,6 +397,9 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---------------- 路由 ----------------
     def do_GET(self):
+        if not self._host_ok():
+            self._json({'error': 'forbidden'}, 403)
+            return
         path = urllib.parse.urlparse(self.path).path
         try:
             if path in ('/', '/index.html'):
@@ -387,6 +432,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json({'error': '服务器错误: %s' % exc}, 500)
 
     def do_POST(self):
+        if not self._host_ok():
+            self._json({'error': 'forbidden'}, 403)
+            return
         path = urllib.parse.urlparse(self.path).path
         body = self._read_json()
         if body is None:
@@ -436,6 +484,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({'error': '目录不存在: %s' % ws}, 400)
                 return
             cfg['workspace'] = resolved
+            config.save_machine_workspace(machine_fp(), resolved)  # 按机器码记忆, 防 config 重置后丢失
             _log('设置工作区: %s → %s' % (ws, resolved))
             if os.path.normpath(resolved) != os.path.normpath(ws):
                 note = '已自动定位到相册目录: %s' % resolved
@@ -460,7 +509,7 @@ class Handler(BaseHTTPRequestHandler):
             root.attributes('-topmost', True)
             root.update()
             chosen = filedialog.askdirectory(
-                parent=root, title='选择像素蛋糕工作区目录（含 thumbnail_cache 的文件夹）')
+                parent=root, title='选择工作区目录（含 thumbnail_cache 的文件夹）')
             root.destroy()
         except Exception as exc:
             _log('目录选择框异常: %r' % (exc,))
@@ -520,13 +569,16 @@ class Handler(BaseHTTPRequestHandler):
             self._json({'error': '尚未设置工作区'}, 400)
             return
         state = uploader._load_state()
+        files_state = uploader._files(state)
         albums = []
         for a in scanner.find_albums(ws):
             photos = scanner.scan_project_photos(a['path'])
             total_bytes = sum(f['size'] for f in scanner.album_upload_files(a['path']))
             uploaded_bytes = 0
             for f in scanner.album_upload_files(a['path']):
-                prev = state.get(f['rel_path'])
+                if not scanner.rel_path_ok(f['rel_path']):
+                    continue   # 与上传计划口径一致 (H4)
+                prev = files_state.get(f['rel_path'])
                 if prev and prev.get('size') == f['size'] and prev.get('mtime') == f['mtime'] \
                         and prev.get('uploaded') == f['size']:
                     uploaded_bytes += f['size']
@@ -535,6 +587,8 @@ class Handler(BaseHTTPRequestHandler):
                 'path': a['path'], 'photo_count': len(photos),
                 'total_bytes': total_bytes, 'uploaded_bytes': uploaded_bytes,
                 'complete': total_bytes > 0 and uploaded_bytes >= total_bytes,
+                # 相册目录创建时间 (Windows ctime), 供界面按「今天新建」识别相册
+                'created_at': int(os.path.getctime(a['path'])),
             })
         albums.sort(key=lambda x: (-x['photo_count']))
         self._json({'workspace': ws, 'albums': albums})
