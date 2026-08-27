@@ -26,7 +26,7 @@ jobs:
       - name: Build .app
         run: |
           pyinstaller -y --noconfirm --windowed --name pixcake-photographer \
-            --add-data static:static run.py
+            --icon app.icns --add-data static:static run.py
       - name: Create dmg
         run: |
           hdiutil create -volname "像素蛋糕摄影师端" -srcfolder dist/pixcake-photographer.app \
